@@ -43,6 +43,8 @@ class Runtime:
         self.presence_sent: tuple[str, float] = ('', 0.0)
         self.last_push = 0.0
         self.error: str | None = None
+        self.verify_until = 0.0
+        self.verify_next = 0.0
 
 
 class Engine:
@@ -113,6 +115,20 @@ class Engine:
             r.next_ok.clear()
             r.presence_sent = ('', 0.0)
         self._wake.set()
+
+    def verify_start(self, fid: str) -> dict:
+        """Ask the server for a verification link; the engine then watches for the result for ten minutes."""
+        with self.lock:
+            c = self.cmdrs.get(fid)
+            name = c.name if c else self.settings.commander(fid).get('name', '')
+        j = self.client.push(keys.commander_key(fid), fid, 'verify-start', {'name': name})
+        with self.lock:
+            r = self._rt(fid)
+            r.blocked, r.blocked_until = None, 0.0
+            r.verify_until = time.time() + 600
+            r.verify_next = time.time() + 10
+        self._wake.set()
+        return {'url': j.get('url', ''), 'code': j.get('code', '')}
 
     def forget(self, fid: str) -> str | None:
         """Ask the server to delete this commander; on success drop the local key and settings."""
@@ -237,6 +253,20 @@ class Engine:
         r = self._rt(fid)
         if not c.name or (r.blocked and now < r.blocked_until):
             return
+        if r.verify_until > now and not r.verified and now >= r.verify_next:
+            r.verify_next = now + 10
+            try:
+                j = self.client.push(keys.commander_key(fid), fid, 'enroll', {'name': c.name})
+                r.enrolled, r.verified = True, bool(j.get('verified'))
+                r.pub_id = j.get('pub_id') or r.pub_id or self.settings.commander(fid).get('pub_id')
+                if r.verified:
+                    r.verify_until = 0.0
+                    r.prefs_sent = None
+                    r.sent.clear()
+            except ProtoError as e:
+                if e.code not in ('claimed', 'not-enrolled'):
+                    raise
+                return
         prefs = self.settings.prefs(fid)
         if not any(prefs['share'].values()) and not prefs['presence'] and not r.enrolled:
             r.blocked = None
@@ -251,7 +281,8 @@ class Engine:
                 r.blocked = None
             pd = digest(prefs)
             if r.prefs_sent != pd:
-                self.client.push(key, fid, 'prefs', prefs)
+                j = self.client.push(key, fid, 'prefs', prefs)
+                r.verified = bool(j.get('verified', r.verified))
                 r.prefs_sent = pd
             self._snapshot(c, r, key, prefs, now)
             self._presence(c, r, key, prefs, now)
@@ -259,7 +290,7 @@ class Engine:
         except ProtoError as e:
             if e.code in ('claimed', 'not-enrolled'):
                 r.blocked = e.args[0]
-                r.blocked_until = now + 3600
+                r.blocked_until = now + (15 if r.verify_until > now else 3600)
                 r.enrolled = False
                 return
             if e.code in ('implausible', 'body'):
@@ -283,6 +314,7 @@ class Engine:
         if not cats:
             return
         j = self.client.push(key, c.fid, 'snapshot', {'categories': {k: v[0] for k, v in cats.items()}})
+        r.verified = bool(j.get('verified', r.verified))
         for cat in j.get('accepted', []):
             if cat in cats:
                 r.sent[cat] = cats[cat][1]

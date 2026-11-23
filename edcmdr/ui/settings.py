@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDia
 
 from .. import NAME, VERSION
 from ..config import DELAY_LABELS, DELAYS, SHAREABLE
+from ..proto import ProtoError
 from ..uplink import Engine
 
 LABELS = {
@@ -79,9 +80,12 @@ class SettingsWindow(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         row2 = QHBoxLayout()
         self.open_btn, self.forget_btn = QPushButton('Open page'), QPushButton('Forget on EDCMDR…')
+        self.verify_btn = QPushButton('Verify with Frontier…')
         self.open_btn.clicked.connect(self._open_page)
         self.forget_btn.clicked.connect(self._forget)
+        self.verify_btn.clicked.connect(self._verify)
         row2.addWidget(self.open_btn)
+        row2.addWidget(self.verify_btn)
         row2.addStretch()
         row2.addWidget(self.forget_btn)
         g2l.addWidget(self.table)
@@ -110,6 +114,23 @@ class SettingsWindow(QWidget):
         c = self._selected()
         if c and c['pub_id']:
             webbrowser.open(f"{self.engine.client.base}/cmdr/{c['pub_id']}")
+
+    def _verify(self):
+        c = self._selected()
+        if not c:
+            return
+        try:
+            v = self.engine.verify_start(c['fid'])
+        except ProtoError as e:
+            QMessageBox.warning(self, 'Verify with Frontier', str(e))
+            return
+        QMessageBox.information(self, 'Verify with Frontier',
+                                f"Your browser will open EDCMDR's verification page.\n\n"
+                                f"Code: {v['code']}\n\n"
+                                'Continue only if the page shows this same code. You sign in on Frontier\'s own site; '
+                                'EDCMDR keeps no password or token. This installation then becomes the only one that can '
+                                f"publish as CMDR {c['name']}.")
+        webbrowser.open(v['url'])
 
     def _forget(self):
         c = self._selected()
@@ -273,5 +294,5 @@ class SettingsWindow(QWidget):
             self.who.blockSignals(False)
             self._load_prefs()
         has = bool(cm)
-        for x in (self.open_btn, self.forget_btn):
+        for x in (self.open_btn, self.forget_btn, self.verify_btn):
             x.setEnabled(has)

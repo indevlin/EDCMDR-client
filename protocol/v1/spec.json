@@ -1,7 +1,7 @@
 {
   "protocol": 1,
   "kinds": ["enroll", "verify-start", "prefs", "snapshot", "presence", "portrait", "squadron", "forget"],
-  "kinds_live": ["enroll", "prefs", "snapshot", "presence", "forget"],
+  "kinds_live": ["enroll", "verify-start", "prefs", "snapshot", "presence", "forget"],
   "categories": ["identity", "presence", "location", "ranks", "statistics", "fleet", "engineering", "powerplay", "squadron", "portrait"],
   "snapshot_categories": ["identity", "location", "ranks", "statistics", "fleet", "engineering", "powerplay", "squadron"],
   "always_shared": ["identity"],
@@ -37,6 +37,7 @@
     "json": 400, "envelope": 400, "key": 400, "fid": 400, "kind": 400, "body": 400,
     "signature": 401, "build": 401,
     "not-enrolled": 403, "claimed": 403, "not-leader": 403,
+    "upstream": 502,
     "method": 405,
     "clock": 409, "replay": 409, "version": 409,
     "size": 413,

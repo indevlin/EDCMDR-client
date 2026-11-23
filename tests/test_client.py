@@ -221,6 +221,42 @@ class TestEndToEnd(unittest.TestCase):
     def tearDownClass(cls):
         cls.ts.tearDownModule()
 
+    def _verify_takeover(self):
+        """Another install holds BRAVO TWO; this engine verifies with Frontier and takes it over."""
+        import urllib.parse
+        from edcmdr.uplink import Engine
+        ts = self.ts
+        holder = ts.Client(fid='F1000002')
+        holder.push('enroll', {'name': 'BRAVO TWO'})
+        s = Settings(TMP / 'e2e-verify.json')
+        s.data['journal_dirs'] = [str(FIX)]
+        p = s.prefs('F1000002')
+        p['share']['ranks'] = True
+        s.set_prefs('F1000002', p)
+        os.environ['EDCMDR_HOME'] = str(TMP / 'home-verify')
+        e = Engine(s, Client(self.base))
+        e.tick()
+        snap = {c['fid']: c for c in e.snapshot()['commanders']}
+        self.assertIn('Another installation', snap['F1000002']['blocked'] or '')
+        v = e.verify_start('F1000002')
+        self.assertRegex(v['code'], r'^[A-Z2-9]{3}-[A-Z2-9]{3}$')
+        path = urllib.parse.urlsplit(v['url']).path
+        st, h = ts.get_noredirect(path + '/go')
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(h['Location']).query)
+        ts.Frontier.challenge = q['code_challenge'][0]
+        ts.Frontier.profile = {'commander': {'id': 1000002, 'name': 'BRAVO TWO'}}
+        st, html, _ = ts.request('/verify/callback?' + urllib.parse.urlencode({'code': 'good-code', 'state': q['state'][0]}))
+        self.assertEqual(st, 200, html)
+        e.rt['F1000002'].verify_next = 0
+        e.tick()
+        c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
+        self.assertTrue(c['verified'] and c['enrolled'], c)
+        self.assertIsNone(c['blocked'])
+        with self.assertRaises(ProtoError) as err:
+            Client(self.base).push(holder.key, 'F1000002', 'prefs', {})
+        self.assertEqual(err.exception.code, 'not-enrolled', 'the earlier installation is revoked')
+        os.environ['EDCMDR_HOME'] = str(TMP / 'home')
+
     def test_engine_publishes(self):
         from edcmdr.uplink import Engine
         s = Settings(TMP / 'e2e-settings.json')
@@ -245,6 +281,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertIn('Executive Director', html)
         e.tick()
         self.assertEqual(e.status, 'Connected', 'second pass sends nothing new and stays connected')
+        self._verify_takeover()
         self.assertIsNone(e.forget('F1000001'))
         st, html, _ = self.ts.request(f'/cmdr/{pub}/alpha-one')
         self.assertEqual(st, 404)
