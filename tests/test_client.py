@@ -190,6 +190,19 @@ class TestProto(unittest.TestCase):
             self.c.push(self.k, 'F1', 'enroll', {'name': 'X'})
         self.assertEqual((e.exception.code, e.exception.status), ('claimed', 403))
 
+    def test_update_notice_and_maintenance_backoff(self):
+        from edcmdr.uplink import Engine
+        e = Engine(Settings(TMP / 'notice.json'), Client(self.base))
+        e.server = {'latest_client': '20991231'}
+        self.assertEqual(e.snapshot()['update'], '20991231')
+        for latest in ('20200101', 'garbage!', ''):
+            e.server = {'latest_client': latest}
+            self.assertEqual(e.update_available(), '', latest)
+        now = time.time()
+        e._fail(ProtoError('maintenance', 'Back soon', 503, {'retry_after': 300}))
+        self.assertTrue(e.status.startswith('Server maintenance; retrying in '))
+        self.assertTrue(now + 305 <= e.backoff <= now + 361, 'retry_after plus jitter, not exponential')
+
     def test_http_refused_for_remote(self):
         with self.assertRaises(ProtoError):
             Client('http://example.com')

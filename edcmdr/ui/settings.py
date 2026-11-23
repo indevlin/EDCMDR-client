@@ -382,7 +382,8 @@ class SettingsWindow(QWidget):
     # ── refresh ─────────────────────────────────────────────────────────────
     def refresh(self):
         snap = self.engine.snapshot()
-        self.status.setText(f"{snap['status']}")
+        upd = f" · Update {snap['update']} available at edcmdr.com/client" if snap['update'] else ''
+        self.status.setText(f"{snap['status']}{upd}")
         dirs = [str(p) for p in self.engine.settings.journal_dirs]
         if [self.dirs.item(i).text() for i in range(self.dirs.count())] != dirs:
             self.dirs.clear()

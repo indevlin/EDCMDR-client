@@ -6,11 +6,12 @@ listen through on_change; nothing here imports Qt.
 import hashlib
 import json
 import logging
+import random
 import threading
 import time
 from typing import Callable
 
-from . import journal, keys
+from . import VERSION, journal, keys
 from .config import SPEC, Settings
 from .proto import Client, ProtoError
 from .state import EVENTS, Commander
@@ -215,7 +216,7 @@ class Engine:
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'in_game': c.presence()['in_game']})
             return {'state': self.state, 'status': self.status, 'official': self.client.official,
-                    'server': self.client.base, 'commanders': cm}
+                    'server': self.client.base, 'commanders': cm, 'update': self.update_available()}
 
     # ── loop ────────────────────────────────────────────────────────────────
     def _rt(self, fid: str) -> Runtime:
@@ -265,6 +266,11 @@ class Engine:
             self._fail(e)
         self._notify()
 
+    def update_available(self) -> str:
+        """The newer client build the server announces, or ''."""
+        latest = str((self.server or {}).get('latest_client', ''))
+        return latest if latest.isdigit() and len(latest) == 8 and latest > VERSION else ''
+
     def _hello(self) -> None:
         j = self.client.hello()
         self.server = j
@@ -276,8 +282,8 @@ class Engine:
             self.status = 'Unofficial build'
 
     def _fail(self, e: ProtoError) -> None:
-        if e.code == 'rate' and isinstance(e.extra.get('retry_after'), int):
-            wait = e.extra['retry_after'] + 5
+        if e.code in ('rate', 'maintenance') and isinstance(e.extra.get('retry_after'), int):
+            wait = e.extra['retry_after'] + random.randint(5, 60)
         else:
             wait = self.backoff_step
             self.backoff_step = min(BACKOFF_MAX, self.backoff_step * 2)
@@ -288,6 +294,8 @@ class Engine:
         elif e.code == 'version':
             self.status = 'Update required'
             self.backoff = time.time() + 3600
+        elif e.code == 'maintenance':
+            self.status = f'Server maintenance; retrying in {int(wait)} s'
         else:
             self.status = f'Retrying in {int(wait)} s: {e}'
         log.warning('push failed: %s (%s)', e, e.code)

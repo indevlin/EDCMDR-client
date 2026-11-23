@@ -75,7 +75,8 @@ class Tray:
         self.tray.setIcon(style.icon('error' if err else state))
         last = max([c['last_push'] for c in s['commanders']] or [0])
         when = f" · last push {int((time.time() - last) // 60)} min ago" if last else ''
-        text = f"EDCMDR — {s['status']}{when}"
+        upd = f" · update {s['update']} available" if s['update'] else ''
+        text = f"EDCMDR — {s['status']}{when}{upd}"
         self.tray.setToolTip(text)
         self.head.setText(text if len(text) < 60 else text[:57] + '…')
         self.a_pause.setEnabled(state == 'running')

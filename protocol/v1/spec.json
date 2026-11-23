@@ -54,6 +54,6 @@
     "implausible": 422,
     "rate": 429,
     "not-implemented": 501,
-    "server": 500, "unconfigured": 503
+    "server": 500, "unconfigured": 503, "maintenance": 503
   }
 }

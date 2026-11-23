@@ -48,9 +48,17 @@ key is not in this repository. Release builds get it from the
 the server refuses what it sends.
 
 ```sh
+python3 -m venv .venv && . .venv/bin/activate
 python3 -m pip install -r requirements-dev.txt
-python3 scripts/build.py            # dist/EDCMDR-<version>-<os>-<arch>
+python3 scripts/build.py --release  # dist/EDCMDR-<version>-<os>-<arch>
 ```
+
+`--release` refuses to build without the build key and the pinned server key
+in `edcmdr/keys.py`. PyInstaller builds for the system it runs on; Windows and
+macOS binaries come from the Release workflow: push a tag equal to `VERSION`
+in `edcmdr/__init__.py` (`YYYYMMDD`), or run it by hand with `dry_run` to get
+the binaries as run artefacts without publishing. edcmdr.com mirrors the
+latest published release within the hour.
 
 ## Tests
 
