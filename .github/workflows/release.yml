@@ -1,0 +1,92 @@
+name: Release
+
+# Builds official binaries for Linux, Windows and macOS.
+#
+# Triggers:
+#   push of a tag YYYYMMDD     builds and publishes a release for that tag
+#   workflow_dispatch          builds any branch; dry_run (default) attaches artefacts to the run only
+#
+# Secrets:
+#   EDCMDR_BUILD_KEY   Ed25519 build key (bin/keygen.php build, in the server repo). Injected into the
+#                      binary for the build, removed afterwards, never written to the repository.
+#                      Without it the job fails: official builds only.
+#   SIGNING_KEY        optional ed25519 SSH key; signs the SHA-256 manifest (principal indevlin-vcs@indevlin.com)
+#
+# Only actions owned by GitHub are used, as the indevlin organisation requires.
+
+on:
+  push:
+    tags: ['[0-9]*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build without publishing a release
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Version matches tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          v=$(python -c "import edcmdr;print(edcmdr.VERSION)")
+          test "$v" = "${GITHUB_REF_NAME}" || { echo "::error::tag ${GITHUB_REF_NAME} != VERSION $v"; exit 1; }
+      - name: Install
+        run: python -m pip install -r requirements-dev.txt
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/test_client.py
+      - name: Build
+        env:
+          EDCMDR_BUILD_KEY: ${{ secrets.EDCMDR_BUILD_KEY }}
+        run: python scripts/build.py --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edcmdr-${{ matrix.os }}
+          path: dist/*
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag' || inputs.dry_run == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Manifest and signature
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          cd out
+          v=$(ls | head -1 | cut -d- -f2)
+          sha256sum * > "EDCMDR-$v.sha256"
+          if [ -n "$SIGNING_KEY" ]; then
+            install -m 600 /dev/null ~/signing_key
+            printf '%s\n' "$SIGNING_KEY" > ~/signing_key
+            ssh-keygen -Y sign -f ~/signing_key -n edcmdr.release "EDCMDR-$v.sha256"
+            rm -f ~/signing_key
+          fi
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          [ "${GITHUB_REF_TYPE}" = tag ] || tag=$(ls out | head -1 | cut -d- -f2)
+          gh release create "$tag" out/* --title "EDCMDR client $tag" --notes "See CHANGELOG.md." --verify-tag || \
+            gh release upload "$tag" out/* --clobber

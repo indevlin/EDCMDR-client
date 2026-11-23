@@ -1,0 +1,4 @@
+{ "timestamp":"2026-11-20T11:00:00Z", "event":"Fileheader", "part":1, "language":"English/UK", "Odyssey":true, "gameversion":"4.4.2.1", "build":"r1 " }
+{ "timestamp":"2026-11-20T11:00:05Z", "event":"Commander", "FID":"F1000002", "Name":"BRAVO TWO" }
+{ "timestamp":"2026-11-20T11:00:06Z", "event":"LoadGame", "FID":"F1000002", "Commander":"BRAVO TWO", "Ship":"SideWinder", "ShipID":1, "ShipName":"", "ShipIdent":"", "GameMode":"Solo" }
+{ "timestamp":"2026-11-20T11:00:06Z", "event":"Rank", "Combat":0, "Trade":0, "Explore":1, "Soldier":0, "Exobiologist":0, "Empire":0, "Federation":0, "CQC":0 }

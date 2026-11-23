@@ -1,0 +1,8 @@
+# EDCMDR-client — .gitignore
+edcmdr/_build_secret.py
+*.key
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc

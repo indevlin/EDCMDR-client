@@ -1,0 +1,14 @@
+{ "timestamp":"2026-11-20T10:00:00Z", "event":"Fileheader", "part":1, "language":"English/UK", "Odyssey":true, "gameversion":"4.4.2.1", "build":"r1 " }
+{ "timestamp":"2026-11-20T10:00:05Z", "event":"Commander", "FID":"F1000001", "Name":"ALPHA ONE" }
+{ "timestamp":"2026-11-20T10:00:06Z", "event":"LoadGame", "FID":"F1000001", "Commander":"ALPHA ONE", "Horizons":true, "Odyssey":true, "Ship":"Mandalay", "Ship_Localised":"Mandalay", "ShipID":0, "ShipName":"SPECULATOR", "ShipIdent":"M-SPEC", "GameMode":"Open", "Credits":1000 }
+{ "timestamp":"2026-11-20T10:00:06Z", "event":"Rank", "Combat":4, "Trade":13, "Explore":7, "Soldier":0, "Exobiologist":5, "Empire":6, "Federation":5, "CQC":0 }
+{ "timestamp":"2026-11-20T10:00:06Z", "event":"Progress", "Combat":43, "Trade":100, "Explore":21, "Soldier":0, "Exobiologist":8, "Empire":40, "Federation":41, "CQC":0 }
+{ "timestamp":"2026-11-20T10:00:06Z", "event":"Reputation", "Empire":93.314003, "Federation":79.072701, "Independent":0.000000, "Alliance":81.147697 }
+{ "timestamp":"2026-11-20T10:00:07Z", "event":"SquadronStartup", "SquadronID":42, "SquadronName":"TEST WING", "CurrentRank":0, "CurrentRankName":"Executive Director" }
+{ "timestamp":"2026-11-20T10:00:08Z", "event":"Statistics", "Bank_Account":{ "Current_Wealth":31162753179, "Spent_On_Ships":412382188 }, "Combat":{ "Bounties_Claimed":3354, "Bounty_Hunting_Profit":344578827 }, "Trading":{ "Market_Profits":7290029838 }, "Mining":{ "Mining_Profits":5153931315, "Quantity_Mined":28183, "Materials_Collected":8140 } }
+{ "timestamp":"2026-11-20T10:00:09Z", "event":"Powerplay", "Power":"Nakato Kaine", "Rank":153, "Merits":1202899, "TimePledged":6715889 }
+{ "timestamp":"2026-11-20T10:00:10Z", "event":"Location", "Docked":true, "StationName":"Test Port", "StarSystem":"Deriso", "Body":"Deriso 1" }
+{ "timestamp":"2026-11-20T10:00:11Z", "event":"Loadout", "Ship":"mandalay", "ShipID":0, "ShipName":"SPECULATOR", "ShipIdent":"M-SPEC", "ModulesValue":6641893, "HullValue":100, "HullHealth":1.0, "CargoCapacity":16, "MaxJumpRange":105.56472, "Rebuy":332094, "Modules":[ { "Slot":"Armour", "Item":"mandalay_armour_grade1", "Engineering":{ "BlueprintName":"Armour_HeavyDuty", "Level":5, "Quality":1.0, "ExperimentalEffect_Localised":"Deep Plating" } }, { "Slot":"PowerPlant", "Item":"int_powerplant_size2_class5" } ] }
+{ "timestamp":"2026-11-20T10:00:12Z", "event":"StoredShips", "StationName":"Test Port", "MarketID":1, "StarSystem":"Deriso", "ShipsHere":[ { "ShipID":3, "ShipType":"lakonminer", "ShipType_Localised":"Type-11 Prospector", "Name":"FOSSOR", "Value":4315489, "Hot":false } ], "ShipsRemote":[ { "ShipID":5, "ShipType":"cobramkv", "Name":"OPTIMA", "StarSystem":"Sol", "Value":100, "Hot":false } ] }
+{ "timestamp":"2026-11-20T10:00:13Z", "event":"Loadout", "Ship":"adder_taxi", "ShipID":4294967295, "Modules":[] }
+{ "timestamp":"2026-11-20T10:30:00Z", "event":"Shutdown" }
