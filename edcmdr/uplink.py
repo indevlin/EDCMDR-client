@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import random
+import secrets
 import threading
 import time
 from typing import Callable
@@ -22,6 +23,8 @@ TICK = 1.0
 DEBOUNCE = 60
 PRESENCE_EVERY = 300
 HELLO_EVERY = 6 * 3600
+VERIFY_POLL = 4
+VERIFY_NOTE = 600
 BACKOFF_MIN, BACKOFF_MAX = 30, 900
 
 
@@ -46,6 +49,9 @@ class Runtime:
         self.error: str | None = None
         self.verify_until = 0.0
         self.verify_next = 0.0
+        self.verifier: str | None = None
+        self.vtoken: str | None = None
+        self.verify_note: tuple[str, float] | None = None
         self.leader_of: int | None = None
 
     def note(self, j: dict) -> dict:
@@ -127,18 +133,64 @@ class Engine:
         self._wake.set()
 
     def verify_start(self, fid: str) -> dict:
-        """Ask the server for a verification link; the engine then watches for the result for ten minutes."""
+        """Ask the server for a verification link; the engine then finishes it once the browser is back.
+
+        The PKCE verifier is made and kept here, in memory; the server gets only its challenge."""
         with self.lock:
             c = self.cmdrs.get(fid)
             name = c.name if c else self.settings.commander(fid).get('name', '')
-        j = self.client.push(keys.commander_key(fid), fid, 'verify-start', {'name': name})
+        verifier = keys.b64u(secrets.token_bytes(48))
+        challenge = keys.b64u(hashlib.sha256(verifier.encode()).digest())
+        j = self.client.push(keys.commander_key(fid), fid, 'verify-start', {'name': name, 'challenge': challenge})
         with self.lock:
             r = self._rt(fid)
             r.blocked, r.blocked_until = None, 0.0
-            r.verify_until = time.time() + 600
-            r.verify_next = time.time() + 10
+            r.verifier, r.vtoken = verifier, None
+            r.verify_note = ("Verifying: sign in on Frontier's site", time.time() + VERIFY_NOTE)
+            r.verify_until = float(j.get('expires') or time.time() + 600)
+            r.verify_next = time.time() + VERIFY_POLL
         self._wake.set()
         return {'url': j.get('url', ''), 'code': j.get('code', '')}
+
+    def _verify_step(self, fid: str, c: Commander, r: Runtime) -> None:
+        """Poll for Frontier's code, exchange it here, hand the token to the server once."""
+        key = keys.commander_key(fid)
+        try:
+            if r.vtoken is None:
+                p = self.client.push(key, fid, 'verify-poll', {})
+                st = p.get('state')
+                if st == 'waiting':
+                    return
+                if st != 'ready':
+                    self._verify_end(r, {'cancelled': "it was cancelled on Frontier's site.",
+                                         'expired': 'the link expired; press Verify again.'}.get(
+                                             st, 'press Verify again.'))
+                    return
+                r.verify_note = ('Verifying: finishing with Frontier', time.time() + VERIFY_NOTE)
+                r.vtoken = self.client.frontier_token(str(p.get('token_url', '')), {
+                    'grant_type': 'authorization_code', 'client_id': p.get('client_id', ''), 'code': p.get('code', ''),
+                    'code_verifier': r.verifier, 'redirect_uri': p.get('redirect_uri', '')})
+            j = self.client.push(key, fid, 'verify-finish', {'access_token': r.vtoken})
+        except ProtoError as e:
+            if e.code == 'upstream':
+                r.verify_note = (f'Verifying: {e} Retrying.', time.time() + VERIFY_NOTE)
+                return
+            if e.code in ('frontier', 'different-commander', 'no-verification', 'version', 'unconfigured'):
+                self._verify_end(r, str(e))
+                return
+            raise
+        self._verify_end(r, None)
+        r.enrolled, r.verified = True, True
+        r.pub_id = j.get('pub_id') or r.pub_id
+        r.blocked, r.blocked_until = None, 0.0
+        r.prefs_sent = None
+        r.sent.clear()
+        self.settings.set_commander(fid, pub_id=r.pub_id, name=c.name)
+
+    @staticmethod
+    def _verify_end(r: Runtime, why: str | None) -> None:
+        r.verify_until, r.verifier, r.vtoken = 0.0, None, None
+        r.verify_note = (f'Verification failed: {why}', time.time() + VERIFY_NOTE) if why else None
 
     def _ensure_enrolled(self, fid: str) -> None:
         """Enroll and send prefs now, ahead of a one-off push from the UI."""
@@ -214,6 +266,7 @@ class Engine:
                 cm.append({'fid': fid, 'name': c.name, 'enrolled': r.enrolled, 'verified': r.verified,
                            'leader_of': r.leader_of,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
+                           'verify': r.verify_note[0] if r.verify_note and r.verify_note[1] > time.time() else None,
                            'in_game': c.presence()['in_game']})
             return {'state': self.state, 'status': self.status, 'official': self.client.official,
                     'server': self.client.base, 'commanders': cm, 'update': self.update_available()}
@@ -303,22 +356,15 @@ class Engine:
     def _sync(self, fid: str, now: float) -> None:
         c = self.cmdrs[fid]
         r = self._rt(fid)
-        if not c.name or (r.blocked and now < r.blocked_until):
+        if not c.name:
             return
-        if r.verify_until > now and not r.verified and now >= r.verify_next:
-            r.verify_next = now + 10
-            try:
-                j = self.client.push(keys.commander_key(fid), fid, 'enroll', {'name': c.name})
-                r.enrolled, r.verified = True, bool(j.get('verified'))
-                r.pub_id = j.get('pub_id') or r.pub_id or self.settings.commander(fid).get('pub_id')
-                if r.verified:
-                    r.verify_until = 0.0
-                    r.prefs_sent = None
-                    r.sent.clear()
-            except ProtoError as e:
-                if e.code not in ('claimed', 'not-enrolled'):
-                    raise
-                return
+        if r.verifier and now > r.verify_until:
+            self._verify_end(r, 'the link expired; press Verify again.')
+        elif r.verifier and now >= r.verify_next:
+            r.verify_next = now + VERIFY_POLL
+            self._verify_step(fid, c, r)
+        if r.blocked and now < r.blocked_until:
+            return
         prefs = self.settings.prefs(fid)
         if not any(prefs['share'].values()) and not prefs['presence'] and not r.enrolled:
             r.blocked = None

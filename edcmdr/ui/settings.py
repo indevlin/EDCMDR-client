@@ -137,9 +137,9 @@ class SettingsWindow(QWidget):
         QMessageBox.information(self, 'Verify with Frontier',
                                 f"Your browser will open EDCMDR's verification page.\n\n"
                                 f"Code: {v['code']}\n\n"
-                                'Continue only if the page shows this same code. You sign in on Frontier\'s own site; '
-                                'EDCMDR keeps no password or token. This installation then becomes the only one that can '
-                                f"publish as CMDR {c['name']}.")
+                                'Continue only if the page shows this same code. You sign in on Frontier\'s own site, '
+                                'then this app finishes the verification; EDCMDR keeps no password or token. This '
+                                f"installation then becomes the only one that can publish as CMDR {c['name']}.")
         webbrowser.open(v['url'])
 
     @staticmethod
@@ -392,7 +392,9 @@ class SettingsWindow(QWidget):
         sel = self.table.currentRow()
         self.table.setRowCount(len(cm))
         for i, c in enumerate(cm):
-            if c['blocked']:
+            if c['verify']:
+                st = c['verify']
+            elif c['blocked']:
                 st = c['blocked']
             elif c['error']:
                 st = 'Problem: ' + c['error']

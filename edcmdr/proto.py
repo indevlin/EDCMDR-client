@@ -102,6 +102,23 @@ class Client:
             raise ProtoError('reply', 'The reply is not an object.')
         return j
 
+    def frontier_token(self, url: str, form: dict) -> str:
+        """Exchange Frontier's one-time code at its token endpoint, from this computer. Returns the access token."""
+        _check_url(url)
+        req = urllib.request.Request(url, data=urllib.parse.urlencode(form).encode(), method='POST', headers={
+            'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'})
+        status, body, _ = self._open(req)
+        try:
+            j = json.loads(body)
+        except ValueError:
+            j = None
+        j = j if isinstance(j, dict) else {}
+        tok = j.get('access_token')
+        if status != 200 or not isinstance(tok, str) or not tok:
+            why = j.get('error_description') or j.get('error') or f'HTTP {status}'
+            raise ProtoError('frontier', f'Frontier refused the sign-in ({why}).', status)
+        return tok
+
     def hello(self) -> dict:
         n = keys.b64u(secrets.token_bytes(18))
         status, body, headers = self._open(urllib.request.Request(f'{self.base}/api/v1/hello?n={n}'))

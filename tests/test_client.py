@@ -273,9 +273,15 @@ class TestEndToEnd(unittest.TestCase):
                                'squadron': {'id': 4343, 'name': 'BRAVO WING', 'tag': 'BRV', 'rank': 0}}
         st, html, _ = ts.request('/verify/callback?' + urllib.parse.urlencode({'code': 'good-code', 'state': q['state'][0]}))
         self.assertEqual(st, 200, html)
+        snap = {c['fid']: c for c in e.snapshot()['commanders']}
+        self.assertIn('Verifying', snap['F1000002']['verify'])
+        ts.Frontier.calls.clear()
         e.rt['F1000002'].verify_next = 0
         e.tick()
+        self.assertEqual([k for k, _ in ts.Frontier.calls], ['token', 'profile'], 'client exchanges, server reads')
         c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
+        self.assertIsNone(c['verify'])
+        self.assertIsNone(e.rt['F1000002'].vtoken, 'the token is dropped')
         self.assertTrue(c['verified'] and c['enrolled'], c)
         self.assertIsNone(c['blocked'])
         with self.assertRaises(ProtoError) as err:
