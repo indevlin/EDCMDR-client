@@ -12,7 +12,8 @@ import threading
 import time
 from typing import Callable
 
-from . import VERSION, journal, keys
+from . import NAME, VERSION, journal, keys
+from .single import PublisherLock
 from .config import SPEC, Settings
 from .proto import Client, ProtoError
 from .state import EVENTS, Commander
@@ -83,6 +84,8 @@ class Engine:
         self._stop = threading.Event()
         self._wake = threading.Event()
         self.thread: threading.Thread | None = None
+        self.publisher = PublisherLock()
+        self.standby_at = 0.0
 
     # ── control ─────────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -94,6 +97,7 @@ class Engine:
         self._wake.set()
         if self.thread:
             self.thread.join(5)
+        self.publisher.release()
 
     def pause(self) -> None:
         self._set_state('paused')
@@ -284,6 +288,14 @@ class Engine:
 
     def run(self) -> None:
         while not self._stop.is_set():
+            if not self.publisher.acquire():
+                if time.time() - self.standby_at > 30:
+                    self.standby_at = time.time()
+                    self.status = 'Standing by: another EDCMDR publisher is running on this computer'
+                    self._notify()
+                self._wake.wait(30)
+                self._wake.clear()
+                continue
             try:
                 self.tick()
             except Exception:
@@ -321,7 +333,9 @@ class Engine:
         self._notify()
 
     def update_available(self) -> str:
-        """The newer client build the server announces, or ''."""
+        """The newer client build the server announces, or ''. Hosts (EDLD) carry their own version."""
+        if NAME != 'EDCMDR-client':
+            return ''
         latest = str((self.server or {}).get('latest_client', ''))
         return latest if latest.isdigit() and len(latest) == 8 and latest > VERSION else ''
 

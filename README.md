@@ -63,11 +63,13 @@ macOS binaries come from the Release workflow.
 ## Releases
 
 Work lands on `dev`. A release writes the date to `version`, merges `dev` into
-`main`, tags `main` `YYYYMMDD` (annotated) and pushes the tag; the Release
-workflow builds Linux, Windows and macOS binaries from the tag and publishes
-them, with a SHA-256 manifest. Changes are recorded in `CHANGELOG.md`. Run the
-workflow by hand with `dry_run` to get the binaries as run artefacts without
+`main`, tags `main` `YYYYMMDD` (annotated) and pushes the tag. The Release
+workflow checks the tag matches `version` and is on `main`, tests and builds
+Linux and Windows binaries and the macOS app (zipped), signs a SHA-256 manifest,
+and publishes the release with the notes under `## Released in YYYYMMDD` in
+`CHANGELOG.md`. Run it by hand from the Actions tab to build any branch without
 publishing. edcmdr.com mirrors the latest published release within the hour.
+README and CHANGELOG are copied to the GitHub wiki on every push to `main`.
 
 ## Tests
 

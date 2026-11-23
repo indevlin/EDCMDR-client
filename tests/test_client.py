@@ -72,6 +72,18 @@ class TestJournal(unittest.TestCase):
         self.assertEqual(c.mode, 'Group', 'new file assigned once its Commander line appears')
 
 
+class TestPublisherLock(unittest.TestCase):
+    def test_one_publisher(self):
+        from edcmdr.single import PublisherLock
+        path = TMP / 'publisher.lock'
+        a, b = PublisherLock(path), PublisherLock(path)
+        self.assertTrue(a.acquire())
+        self.assertFalse(b.acquire(), 'a second publisher stands by')
+        a.release()
+        self.assertTrue(b.acquire(), 'and takes over once the first stops')
+        b.release()
+
+
 class TestState(unittest.TestCase):
     def test_categories(self):
         _, cm = load([FIX])

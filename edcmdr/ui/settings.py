@@ -34,19 +34,21 @@ def note(text: str) -> QLabel:
 
 
 class SettingsWindow(QWidget):
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, host: str | None = None):
         super().__init__()
         self.engine = engine
+        self.host = host
         self._loading = True
-        self.setWindowTitle('EDCMDR')
+        self.setWindowTitle(f'ED Commanders · {host}' if host else 'EDCMDR')
         self.resize(760, 560)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._commanders_tab(), 'Commanders')
         self.tabs.addTab(self._sharing_tab(), 'Sharing')
         self.sq_widget = None
         self.sq_widget = self._squadron_tab()
-        self.tabs.addTab(self._integrations_tab(), 'Integrations')
-        self.tabs.addTab(self._about_tab(), 'About')
+        if host is None:
+            self.tabs.addTab(self._integrations_tab(), 'Integrations')
+            self.tabs.addTab(self._about_tab(), 'About')
         lay = QVBoxLayout(self)
         self.status = QLabel()
         self.status.setObjectName('head')

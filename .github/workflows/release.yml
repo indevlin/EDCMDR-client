@@ -1,16 +1,20 @@
 name: Release
 
-# Builds official binaries for Linux, Windows and macOS.
+# Builds the official EDCMDR client for Linux, Windows and macOS and publishes it.
 #
 # Triggers:
-#   push of a tag YYYYMMDD     builds and publishes a release for that tag
-#   workflow_dispatch          builds any branch; dry_run (default) attaches artefacts to the run only
+#   push of a tag YYYYMMDD on main    verify, build, sign the manifest, publish the release
+#   workflow_dispatch                 build any branch; the files are attached to the run, not published
 #
 # Secrets:
 #   EDCMDR_BUILD_KEY   Ed25519 build key (bin/keygen.php build, in the server repo). Injected into the
 #                      binary for the build, removed afterwards, never written to the repository.
-#                      Without it the job fails: official builds only.
-#   SIGNING_KEY        optional ed25519 SSH key; signs the SHA-256 manifest (principal indevlin-vcs@indevlin.com)
+#                      Without it the build fails: official builds only.
+#   SIGNING_KEY        optional ed25519 SSH key; signs the SHA-256 manifest
+#                      (principal indevlin-vcs@indevlin.com, namespace edcmdr.release)
+#
+# Files: EDCMDR-<v>-linux-x86_64, EDCMDR-<v>-windows-amd64.exe, EDCMDR-<v>-macos-arm64.zip (the app),
+# EDCMDR-<v>.sha256 and, with SIGNING_KEY, EDCMDR-<v>.sha256.sig. edcmdr.com mirrors them.
 #
 # Only actions owned by GitHub are used, as the indevlin organisation requires.
 
@@ -27,66 +31,184 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHON_VERSION: '3.12'
+
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  verify:
+    name: Verify tag, version file and branch
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
         with:
-          python-version: '3.12'
-      - name: Tag is a version
-        if: github.ref_type == 'tag'
+          fetch-depth: 0
+      - id: read
+        name: Read and check the version
         shell: bash
         run: |
-          [[ "${GITHUB_REF_NAME}" =~ ^[0-9]{8}$ ]] || { echo "::error::tag ${GITHUB_REF_NAME} is not YYYYMMDD"; exit 1; }
-      - name: Install
+          VERSION="$(tr -d '[:space:]' < version)"
+          [[ "$VERSION" =~ ^[0-9]{8}$ ]] || { echo "::error::version file '$VERSION' is not YYYYMMDD"; exit 1; }
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            if [ "${GITHUB_REF_NAME}" != "${VERSION}" ]; then
+              echo "::error::Tag '${GITHUB_REF_NAME}' does not match the version file ('${VERSION}')."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+              echo "::error::Tag '${GITHUB_REF_NAME}' is not on main. Releases are tagged on main only."
+              exit 1
+            fi
+          fi
+          echo "Version ${VERSION}"
+
+  binaries:
+    name: Binary (${{ matrix.platform }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux-x86_64 }
+          - { os: windows-latest, platform: windows-amd64 }
+          - { os: macos-latest, platform: macos-arm64 }
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
+
+      - name: Install Qt runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0
+
+      - name: Protocol lock matches the vendored spec
+        shell: bash
+        run: |
+          want=$(python -c "import json;print(json.load(open('protocol.lock'))['sha256'])")
+          have=$(python -c "import hashlib;print(hashlib.sha256(open('protocol/v1/spec.json','rb').read()).hexdigest())")
+          test "$want" = "$have" || { echo "::error::protocol/v1/spec.json differs from protocol.lock"; exit 1; }
+
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
         run: python tests/test_client.py
+
       - name: Build
         env:
           EDCMDR_BUILD_KEY: ${{ secrets.EDCMDR_BUILD_KEY }}
-          EDCMDR_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          EDCMDR_VERSION: ${{ env.VERSION }}
         run: python scripts/build.py --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: edcmdr-${{ matrix.os }}
-          path: dist/*
 
-  publish:
-    needs: build
-    if: github.ref_type == 'tag' || inputs.dry_run == false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Smoke-test the binary (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          out=$(QT_QPA_PLATFORM=offscreen "dist/EDCMDR-${VERSION}-linux-x86_64" --version)
+          echo "$out"
+          [ "$out" = "EDCMDR-client ${VERSION}" ] || { echo "::error::the binary reports '$out'"; exit 1; }
+
+      - name: Package artefacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          case "${RUNNER_OS}" in
+            Linux)   cp "dist/EDCMDR-${VERSION}-linux-x86_64" release/ ;;
+            Windows) cp "dist/EDCMDR-${VERSION}-windows-amd64.exe" release/ ;;
+            macOS)
+              mv "dist/EDCMDR-${VERSION}-darwin-arm64.app" dist/EDCMDR.app
+              ditto -c -k --keepParent dist/EDCMDR.app "release/EDCMDR-${VERSION}-macos-arm64.zip" ;;
+          esac
+          ls -la release/
+
+      - uses: actions/upload-artifact@v6
         with:
-          path: out
+          name: EDCMDR-${{ matrix.platform }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release
+    needs: [verify, binaries]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && !inputs.dry_run
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: EDCMDR-*
           merge-multiple: true
+          path: release
+
       - name: Manifest and signature
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        shell: bash
         run: |
-          cd out
-          v=$(ls | head -1 | cut -d- -f2)
-          sha256sum * > "EDCMDR-$v.sha256"
+          set -euo pipefail
+          cd release
+          rm -f ./*.sha256 ./*.sig
+          sha256sum -- * > "EDCMDR-${VERSION}.sha256"
+          cat "EDCMDR-${VERSION}.sha256"
           if [ -n "$SIGNING_KEY" ]; then
             install -m 600 /dev/null ~/signing_key
             printf '%s\n' "$SIGNING_KEY" > ~/signing_key
-            ssh-keygen -Y sign -f ~/signing_key -n edcmdr.release "EDCMDR-$v.sha256"
+            ssh-keygen -Y sign -f ~/signing_key -n edcmdr.release "EDCMDR-${VERSION}.sha256"
             rm -f ~/signing_key
           fi
-      - name: Release
+
+      - name: Release notes from the changelog
+        shell: bash
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## Released in " v "[[:space:]]*$" { flag = 1; next }
+            flag && /^## / { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          sed -i -e '/./,$!d' release-notes.md
+          [ -s release-notes.md ] || echo "No changelog entry found for ${VERSION}." > release-notes.md
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Downloads"
+            echo ""
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| Linux (x86_64) | \`EDCMDR-${VERSION}-linux-x86_64\` |"
+            echo "| Windows (x86_64) | \`EDCMDR-${VERSION}-windows-amd64.exe\` |"
+            echo "| macOS (Apple silicon) | \`EDCMDR-${VERSION}-macos-arm64.zip\` |"
+            echo ""
+            echo "Also at https://edcmdr.com/client. \`EDCMDR-${VERSION}.sha256\` lists every file by digest."
+          } >> release-notes.md
+          cat release-notes.md
+
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
-          [ "${GITHUB_REF_TYPE}" = tag ] || tag=$(ls out | head -1 | cut -d- -f2)
-          gh release create "$tag" out/* --title "EDCMDR client $tag" --notes "See CHANGELOG.md." --verify-tag || \
-            gh release upload "$tag" out/* --clobber
+          set -euo pipefail
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" release/* --clobber
+            gh release edit "$VERSION" --notes-file release-notes.md
+          else
+            gh release create "$VERSION" release/* --title "EDCMDR client ${VERSION}" \
+              --notes-file release-notes.md --verify-tag
+          fi
