@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from . import NAME, VERSION, keys
 from .config import SPEC
 
-DEFAULT_SERVER = 'https://www.edcmdr.com'
+DEFAULT_SERVER = 'https://edcmdr.com'
 TIMEOUT = 20
 
 

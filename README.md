@@ -1,6 +1,6 @@
 # EDCMDR client (Python)
 
-Publishes your Elite Dangerous commander to [ED Commanders](https://www.edcmdr.com).
+Publishes your Elite Dangerous commander to [ED Commanders](https://edcmdr.com).
 It reads your journals, keeps what you chose to share, and sends it, signed,
 to EDCMDR. It sits in the system tray: right-click for Pause, Resume, Stop,
 Push now, Settings and Exit.
@@ -10,6 +10,14 @@ Push now, Settings and Exit.
 - **Several commanders**, in one journal folder or several: each journal file
   belongs to the commander named in its first lines.
 - **Your Frontier ID never appears on the site**; EDCMDR keeps only a keyed hash.
+- **Verify with Frontier** proves the commander is yours (a one-time sign-in on
+  Frontier's site; nothing is kept but the result).
+- **Portrait:** pick a screenshot of the Codex hub with your commander tile
+  highlighted; EDCMDR cuts the portrait out. Switching portrait sharing off
+  deletes it.
+- **Squadron tab**, shown only to a squadron's verified leader: home system,
+  power, supported factions, recruiting status and a tagline for the
+  squadron's page.
 - **Forget on EDCMDR** deletes everything the site holds for a commander.
 
 This branch is the Python build (PySide6). The `go` branch is the same

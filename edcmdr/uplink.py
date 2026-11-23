@@ -45,6 +45,15 @@ class Runtime:
         self.error: str | None = None
         self.verify_until = 0.0
         self.verify_next = 0.0
+        self.leader_of: int | None = None
+
+    def note(self, j: dict) -> dict:
+        """Take verified and leader_of from a reply that carries them."""
+        if 'verified' in j:
+            self.verified = bool(j['verified'])
+        if 'leader_of' in j:
+            self.leader_of = j['leader_of'] if isinstance(j['leader_of'], int) else None
+        return j
 
 
 class Engine:
@@ -130,6 +139,40 @@ class Engine:
         self._wake.set()
         return {'url': j.get('url', ''), 'code': j.get('code', '')}
 
+    def _ensure_enrolled(self, fid: str) -> None:
+        """Enroll and send prefs now, ahead of a one-off push from the UI."""
+        key = keys.commander_key(fid)
+        r = self._rt(fid)
+        name = self.cmdrs[fid].name if fid in self.cmdrs else self.settings.commander(fid).get('name', '')
+        if not r.enrolled:
+            j = self.client.push(key, fid, 'enroll', {'name': name})
+            r.enrolled, r.verified = True, bool(j.get('verified'))
+            r.pub_id = j.get('pub_id') or r.pub_id
+        prefs = self.settings.prefs(fid)
+        if r.prefs_sent != digest(prefs):
+            r.note(self.client.push(key, fid, 'prefs', prefs))
+            r.prefs_sent = digest(prefs)
+
+    def push_portrait(self, fid: str, jpeg: bytes) -> str:
+        """Send a Codex screenshot (already JPEG); returns the portrait's path on the site."""
+        import base64
+        with self.lock:
+            self._ensure_enrolled(fid)
+            r = self._rt(fid)
+            j = r.note(self.client.push(keys.commander_key(fid), fid, 'portrait',
+                                        {'image': base64.b64encode(jpeg).decode()}))
+        if j.get('refused'):
+            raise ProtoError('refused', 'Portrait sharing is switched off for this commander.')
+        self._notify()
+        return str(j.get('portrait', ''))
+
+    def save_squadron(self, fid: str, details: dict) -> None:
+        with self.lock:
+            self._ensure_enrolled(fid)
+            r = self._rt(fid)
+            r.note(self.client.push(keys.commander_key(fid), fid, 'squadron', details))
+        self.settings.set_commander(fid, squadron_details=details)
+
     def forget(self, fid: str) -> str | None:
         """Ask the server to delete this commander; on success drop the local key and settings."""
         with self.lock:
@@ -168,6 +211,7 @@ class Engine:
             for fid, c in sorted(self.cmdrs.items(), key=lambda kv: kv[1].name):
                 r = self._rt(fid)
                 cm.append({'fid': fid, 'name': c.name, 'enrolled': r.enrolled, 'verified': r.verified,
+                           'leader_of': r.leader_of,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'in_game': c.presence()['in_game']})
             return {'state': self.state, 'status': self.status, 'official': self.client.official,
@@ -281,8 +325,7 @@ class Engine:
                 r.blocked = None
             pd = digest(prefs)
             if r.prefs_sent != pd:
-                j = self.client.push(key, fid, 'prefs', prefs)
-                r.verified = bool(j.get('verified', r.verified))
+                r.note(self.client.push(key, fid, 'prefs', prefs))
                 r.prefs_sent = pd
             self._snapshot(c, r, key, prefs, now)
             self._presence(c, r, key, prefs, now)
@@ -313,8 +356,7 @@ class Engine:
             cats[cat] = (data, d)
         if not cats:
             return
-        j = self.client.push(key, c.fid, 'snapshot', {'categories': {k: v[0] for k, v in cats.items()}})
-        r.verified = bool(j.get('verified', r.verified))
+        j = r.note(self.client.push(key, c.fid, 'snapshot', {'categories': {k: v[0] for k, v in cats.items()}}))
         for cat in j.get('accepted', []):
             if cat in cats:
                 r.sent[cat] = cats[cat][1]
@@ -332,6 +374,6 @@ class Engine:
         last_d, last_t = r.presence_sent
         if d == last_d and (not p['in_game'] or now - last_t < PRESENCE_EVERY) and not self.force:
             return
-        self.client.push(key, c.fid, 'presence', p)
+        r.note(self.client.push(key, c.fid, 'presence', p))
         r.presence_sent = (d, now)
         r.last_push = now

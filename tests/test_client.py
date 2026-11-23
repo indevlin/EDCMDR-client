@@ -244,7 +244,8 @@ class TestEndToEnd(unittest.TestCase):
         st, h = ts.get_noredirect(path + '/go')
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(h['Location']).query)
         ts.Frontier.challenge = q['code_challenge'][0]
-        ts.Frontier.profile = {'commander': {'id': 1000002, 'name': 'BRAVO TWO'}}
+        ts.Frontier.profile = {'commander': {'id': 1000002, 'name': 'BRAVO TWO'},
+                               'squadron': {'id': 4343, 'name': 'BRAVO WING', 'tag': 'BRV', 'rank': 0}}
         st, html, _ = ts.request('/verify/callback?' + urllib.parse.urlencode({'code': 'good-code', 'state': q['state'][0]}))
         self.assertEqual(st, 200, html)
         e.rt['F1000002'].verify_next = 0
@@ -255,6 +256,27 @@ class TestEndToEnd(unittest.TestCase):
         with self.assertRaises(ProtoError) as err:
             Client(self.base).push(holder.key, 'F1000002', 'prefs', {})
         self.assertEqual(err.exception.code, 'not-enrolled', 'the earlier installation is revoked')
+
+        # leader: Squadron tab data, then a portrait
+        e.set_prefs('F1000002', dict(s.prefs('F1000002'), share=dict(s.prefs('F1000002')['share'], portrait=True)))
+        e.tick()
+        c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
+        self.assertEqual(c['leader_of'], 4343)
+        e.save_squadron('F1000002', {'home_system': 'Deriso', 'power': 'Nakato Kaine', 'factions': ['Test Co'],
+                                     'recruiting': 'open', 'tagline': 'Bravo'})
+        st, html, _ = ts.request('/squadron/4343/bravo-wing')
+        self.assertIn('Deriso', html)
+        self.assertIn('Nakato Kaine', html)
+        jpg = TMP / 'codex.jpg'
+        import subprocess
+        subprocess.run(['php', str(Path(os.environ['EDCMDR_SERVER_REPO']).expanduser() / 'tests/make_codex.php'), str(jpg)], check=True)
+        url = e.push_portrait('F1000002', jpg.read_bytes())
+        self.assertRegex(url, r'^/p/[a-z2-7]{10,12}-1\.webp$')
+        st, html, _ = ts.request('/squadron/4343/bravo-wing')
+        self.assertNotIn('BRAVO TWO', html, 'membership not shared, so not shown as leader')
+        pub = c_pub = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']['pub_id']
+        st, html, _ = ts.request(f'/cmdr/{pub}/bravo-two')
+        self.assertIn(url, html, 'commander page shows the portrait')
         os.environ['EDCMDR_HOME'] = str(TMP / 'home')
 
     def test_engine_publishes(self):

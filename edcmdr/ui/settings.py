@@ -2,13 +2,14 @@
 import time
 import webbrowser
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QGridLayout, QGroupBox,
-                               QHBoxLayout, QHeaderView, QLabel, QListWidget, QMessageBox, QPushButton,
-                               QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
+from PySide6.QtGui import QImage
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout,
+                               QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox,
+                               QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import NAME, VERSION
-from ..config import DELAY_LABELS, DELAYS, SHAREABLE
+from ..config import DELAY_LABELS, DELAYS, SHAREABLE, SPEC
 from ..proto import ProtoError
 from ..uplink import Engine
 
@@ -18,7 +19,10 @@ LABELS = {
     'engineering': 'Engineers', 'powerplay': 'Powerplay', 'squadron': 'Squadron and rank',
     'portrait': 'Codex portrait', 'presence': 'Show when I am in game',
 }
-LATER = {'portrait': 'Arrives with portraits (M3).'}
+LATER: dict[str, str] = {}
+UNDELAYED = set(SPEC['undelayed'])
+POWERS = SPEC['powers']
+RECRUITING = {'': '—', 'open': 'Open', 'invite': 'By invitation', 'closed': 'Closed'}
 DESTS = ['EDDN', 'Inara', 'EDSM', 'EDAstro']
 
 
@@ -39,6 +43,8 @@ class SettingsWindow(QWidget):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._commanders_tab(), 'Commanders')
         self.tabs.addTab(self._sharing_tab(), 'Sharing')
+        self.sq_widget = None
+        self.sq_widget = self._squadron_tab()
         self.tabs.addTab(self._integrations_tab(), 'Integrations')
         self.tabs.addTab(self._about_tab(), 'About')
         lay = QVBoxLayout(self)
@@ -81,11 +87,15 @@ class SettingsWindow(QWidget):
         row2 = QHBoxLayout()
         self.open_btn, self.forget_btn = QPushButton('Open page'), QPushButton('Forget on EDCMDR…')
         self.verify_btn = QPushButton('Verify with Frontier…')
+        self.portrait_btn = QPushButton('Portrait…')
+        self.portrait_btn.setToolTip('Send a screenshot of the Codex hub with your commander tile highlighted.')
+        self.portrait_btn.clicked.connect(self._portrait)
         self.open_btn.clicked.connect(self._open_page)
         self.forget_btn.clicked.connect(self._forget)
         self.verify_btn.clicked.connect(self._verify)
         row2.addWidget(self.open_btn)
         row2.addWidget(self.verify_btn)
+        row2.addWidget(self.portrait_btn)
         row2.addStretch()
         row2.addWidget(self.forget_btn)
         g2l.addWidget(self.table)
@@ -131,6 +141,115 @@ class SettingsWindow(QWidget):
                                 'EDCMDR keeps no password or token. This installation then becomes the only one that can '
                                 f"publish as CMDR {c['name']}.")
         webbrowser.open(v['url'])
+
+    @staticmethod
+    def jpeg(path: str, max_w: int = 1920) -> bytes:
+        """Load a screenshot and re-encode it as JPEG (quality 85, at most max_w wide, no metadata)."""
+        img = QImage(path)
+        if img.isNull():
+            raise ValueError('That file is not a picture.')
+        if img.width() > max_w:
+            img = img.scaledToWidth(max_w, Qt.SmoothTransformation)
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.WriteOnly)
+        img.convertToFormat(QImage.Format_RGB888).save(buf, 'JPEG', 85)
+        return bytes(ba)
+
+    def _portrait(self):
+        c = self._selected()
+        if not c:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, 'Codex screenshot', '', 'Screenshots (*.png *.jpg *.jpeg *.bmp)')
+        if not path:
+            return
+        p = self.engine.settings.prefs(c['fid'])
+        if not p['share'].get('portrait'):
+            if QMessageBox.question(self, 'Portrait', f"Share a portrait for CMDR {c['name']}?\n\n"
+                                    'It is shown on your EDCMDR page and squadron roster, and deleted if you '
+                                    'switch portrait sharing off.') != QMessageBox.Yes:
+                return
+            p['share']['portrait'] = True
+            self.engine.set_prefs(c['fid'], p)
+        try:
+            url = self.engine.push_portrait(c['fid'], self.jpeg(path))
+        except (ProtoError, ValueError) as e:
+            QMessageBox.warning(self, 'Portrait', str(e))
+            return
+        QMessageBox.information(self, 'Portrait', 'Portrait published.')
+        self._load_prefs()
+
+    # ── Squadron (leaders only) ─────────────────────────────────────────────
+    def _squadron_tab(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.addWidget(note('You lead this squadron, verified with Frontier. These details appear on its EDCMDR page.'))
+        form = QFormLayout()
+        self.sq_who = QComboBox()
+        self.sq_who.currentIndexChanged.connect(self._load_squadron)
+        self.sq_home = QLineEdit()
+        self.sq_home.setMaxLength(64)
+        self.sq_power = QComboBox()
+        self.sq_power.addItem('—', None)
+        for pw in POWERS:
+            self.sq_power.addItem(pw, pw)
+        self.sq_factions = QLineEdit()
+        self.sq_factions.setPlaceholderText('Up to five, separated by commas')
+        self.sq_recruit = QComboBox()
+        for k, v in RECRUITING.items():
+            self.sq_recruit.addItem(v, k or None)
+        self.sq_tagline = QLineEdit()
+        self.sq_tagline.setMaxLength(SPEC['limits']['tagline_len'])
+        for label, field in (('Commander', self.sq_who), ('Home system', self.sq_home), ('Power', self.sq_power),
+                             ('Supported factions', self.sq_factions), ('Recruiting', self.sq_recruit),
+                             ('Tagline', self.sq_tagline)):
+            form.addRow(label, field)
+        lay.addLayout(form)
+        save = QPushButton('Save to EDCMDR')
+        save.clicked.connect(self._save_squadron)
+        lay.addWidget(save, alignment=Qt.AlignLeft)
+        lay.addStretch()
+        return w
+
+    def _sync_squadron_tab(self, cm: list[dict]):
+        leaders = [c for c in cm if c.get('leader_of')]
+        idx = self.tabs.indexOf(self.sq_widget) if self.sq_widget else -1
+        if leaders and idx < 0:
+            self.tabs.insertTab(2, self.sq_widget, 'Squadron')
+        elif not leaders and idx >= 0:
+            self.tabs.removeTab(idx)
+        fids = [c['fid'] for c in leaders]
+        if [self.sq_who.itemData(i) for i in range(self.sq_who.count())] != fids:
+            self.sq_who.blockSignals(True)
+            self.sq_who.clear()
+            for c in leaders:
+                self.sq_who.addItem(f"CMDR {c['name']}", c['fid'])
+            self.sq_who.blockSignals(False)
+            self._load_squadron()
+
+    def _load_squadron(self):
+        fid = self.sq_who.currentData()
+        d = self.engine.settings.commander(fid).get('squadron_details') or {} if fid else {}
+        self.sq_home.setText(d.get('home_system') or '')
+        self.sq_power.setCurrentIndex(max(0, self.sq_power.findData(d.get('power'))))
+        self.sq_factions.setText(', '.join(d.get('factions') or []))
+        self.sq_recruit.setCurrentIndex(max(0, self.sq_recruit.findData(d.get('recruiting'))))
+        self.sq_tagline.setText(d.get('tagline') or '')
+
+    def _save_squadron(self):
+        fid = self.sq_who.currentData()
+        if not fid:
+            return
+        factions = [f.strip() for f in self.sq_factions.text().split(',') if f.strip()][:SPEC['limits']['factions']]
+        details = {'home_system': self.sq_home.text().strip() or None, 'power': self.sq_power.currentData(),
+                   'factions': factions, 'recruiting': self.sq_recruit.currentData(),
+                   'tagline': self.sq_tagline.text().strip() or None}
+        try:
+            self.engine.save_squadron(fid, details)
+        except ProtoError as e:
+            QMessageBox.warning(self, 'Squadron', str(e))
+            return
+        QMessageBox.information(self, 'Squadron', 'Saved. The squadron page shows it now.')
 
     def _forget(self):
         c = self._selected()
@@ -182,6 +301,9 @@ class SettingsWindow(QWidget):
                 cb.setEnabled(False)
                 dl.setEnabled(False)
                 cb.setToolTip(LATER[cat])
+            if cat in UNDELAYED:
+                dl.setEnabled(False)
+                dl.setToolTip('Portraits are published at once; switching sharing off deletes them.')
             self.share[cat], self.delay[cat] = cb, dl
             grid.addWidget(cb, r, 1, alignment=Qt.AlignCenter)
             grid.addWidget(dl, r, 2)
@@ -294,5 +416,6 @@ class SettingsWindow(QWidget):
             self.who.blockSignals(False)
             self._load_prefs()
         has = bool(cm)
-        for x in (self.open_btn, self.forget_btn, self.verify_btn):
+        for x in (self.open_btn, self.forget_btn, self.verify_btn, self.portrait_btn):
             x.setEnabled(has)
+        self._sync_squadron_tab(cm)

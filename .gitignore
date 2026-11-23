@@ -1,8 +1,39 @@
-# EDCMDR-client — .gitignore
+# EDCMDR-client (python) — .gitignore
+
+# Build key: injected at build time, never committed
 edcmdr/_build_secret.py
 *.key
+*.pem
+.env
+.env.*
+
+# PyInstaller and packaging output
 build/
 dist/
 *.spec
+*.egg-info/
+.eggs/
+*.whl
+
+# Python caches and environments
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.#*
+\#*\#
+.DS_Store
+Thumbs.db
+desktop.ini

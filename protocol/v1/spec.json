@@ -1,7 +1,7 @@
 {
   "protocol": 1,
   "kinds": ["enroll", "verify-start", "prefs", "snapshot", "presence", "portrait", "squadron", "forget"],
-  "kinds_live": ["enroll", "verify-start", "prefs", "snapshot", "presence", "forget"],
+  "kinds_live": ["enroll", "verify-start", "prefs", "snapshot", "presence", "portrait", "squadron", "forget"],
   "categories": ["identity", "presence", "location", "ranks", "statistics", "fleet", "engineering", "powerplay", "squadron", "portrait"],
   "snapshot_categories": ["identity", "location", "ranks", "statistics", "fleet", "engineering", "powerplay", "squadron"],
   "always_shared": ["identity"],
@@ -9,6 +9,9 @@
   "limits": {
     "body_bytes": 1048576,
     "portrait_bytes": 1572864,
+    "portrait_body_bytes": 2200000,
+    "factions": 5,
+    "tagline_len": 140,
     "clock_skew_s": 300,
     "name_len": 32,
     "text_len": 64,
@@ -33,11 +36,18 @@
   ],
   "statistics_wealth": ["Bank_Account.Current_Wealth"],
   "game_modes": ["Open", "Group", "Solo", "Unknown"],
+  "powers": [
+    "Aisling Duval", "Archon Delaine", "Arissa Lavigny-Duval", "Denton Patreus", "Edmund Mahon",
+    "Felicia Winters", "Jerome Archer", "Li Yong-Rui", "Nakato Kaine", "Pranav Antal",
+    "Yuri Grom", "Zemina Torval"
+  ],
+  "recruiting": ["open", "invite", "closed"],
+  "undelayed": ["portrait"],
   "codes": {
     "json": 400, "envelope": 400, "key": 400, "fid": 400, "kind": 400, "body": 400,
     "signature": 401, "build": 401,
     "not-enrolled": 403, "claimed": 403, "not-leader": 403,
-    "upstream": 502,
+    "upstream": 502, "portrait": 422,
     "method": 405,
     "clock": 409, "replay": 409, "version": 409,
     "size": 413,
