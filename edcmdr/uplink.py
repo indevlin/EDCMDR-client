@@ -292,9 +292,10 @@ class Engine:
             c = self.cmdrs[fid] = Commander(fid)
         c.handle(ev)
         if self.hub is not None:
-            self.hub.observe(fid, ev)
             if self.watcher.imported and self.state == 'running':
-                self.hub.live(fid, ev)
+                self.hub.live(fid, ev, self.watcher.current)
+            else:
+                self.hub.observe(fid, ev)
 
     def run(self) -> None:
         while not self._stop.is_set():

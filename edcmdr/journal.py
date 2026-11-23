@@ -61,6 +61,7 @@ class Watcher:
         self.partial: dict[Path, str] = {}
         self.tail: dict[Path, Path] = {}
         self.imported = False
+        self.current: Path | None = None
 
     def commanders(self) -> dict[str, str]:
         out = {}
@@ -87,6 +88,7 @@ class Watcher:
         if not chunk:
             return
         self.offset[path] = pos + len(chunk)
+        self.current = path.parent
         text = self.partial.pop(path, '') + chunk.decode('utf-8', errors='replace')
         lines = text.split('\n')
         if lines[-1] != '':

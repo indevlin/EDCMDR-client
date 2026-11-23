@@ -23,6 +23,8 @@ QT_EXCLUDES = ['QtNetwork', 'QtQml', 'QtQuick', 'QtSql', 'QtTest', 'QtXml', 'QtO
                'QtWebEngineCore', 'QtMultimedia', 'QtDBus', 'QtConcurrent', 'QtPrintSupport', 'QtDesigner']
 
 
+OS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
+
 def build_key() -> str | None:
     env = os.environ.get('EDCMDR_BUILD_KEY', '').strip()
     if env:
@@ -66,7 +68,7 @@ def main() -> int:
 
     sep = ';' if os.name == 'nt' else ':'
     cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--windowed',
-           '--name', f'EDCMDR-{version}-{platform.system().lower()}-{platform.machine().lower()}',
+           '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
            '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
            '--add-data', f'LICENSE{sep}.']

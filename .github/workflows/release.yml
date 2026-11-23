@@ -13,7 +13,7 @@ name: Release
 #   SIGNING_KEY        optional ed25519 SSH key; signs the SHA-256 manifest
 #                      (principal indevlin-vcs@indevlin.com, namespace edcmdr.release)
 #
-# Files: EDCMDR-<v>-linux-x86_64, EDCMDR-<v>-windows-amd64.exe, EDCMDR-<v>-macos-arm64.zip (the app),
+# Files: EDCMDR-<v>-linux, EDCMDR-<v>-windows.exe, EDCMDR-<v>-macos.zip (the app),
 # EDCMDR-<v>.sha256 and, with SIGNING_KEY, EDCMDR-<v>.sha256.sig. edcmdr.com mirrors them.
 #
 # Only actions owned by GitHub are used, as the indevlin organisation requires.
@@ -71,9 +71,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04, platform: linux-x86_64 }   # oldest glibc GitHub offers: runs on more distributions
-          - { os: windows-latest, platform: windows-amd64 }
-          - { os: macos-latest, platform: macos-arm64 }
+          - { os: ubuntu-latest, platform: linux }
+          - { os: windows-latest, platform: windows }
+          - { os: macos-latest, platform: macos }
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
@@ -115,7 +115,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          out=$(QT_QPA_PLATFORM=offscreen "dist/EDCMDR-${VERSION}-linux-x86_64" --version)
+          out=$(QT_QPA_PLATFORM=offscreen "dist/EDCMDR-${VERSION}-linux" --version)
           echo "$out"
           [ "$out" = "EDCMDR-client ${VERSION}" ] || { echo "::error::the binary reports '$out'"; exit 1; }
 
@@ -125,11 +125,11 @@ jobs:
           set -euo pipefail
           mkdir -p release
           case "${RUNNER_OS}" in
-            Linux)   cp "dist/EDCMDR-${VERSION}-linux-x86_64" release/ ;;
-            Windows) cp "dist/EDCMDR-${VERSION}-windows-amd64.exe" release/ ;;
+            Linux)   cp "dist/EDCMDR-${VERSION}-linux" release/ ;;
+            Windows) cp "dist/EDCMDR-${VERSION}-windows.exe" release/ ;;
             macOS)
-              mv "dist/EDCMDR-${VERSION}-darwin-arm64.app" dist/EDCMDR.app
-              ditto -c -k --keepParent dist/EDCMDR.app "release/EDCMDR-${VERSION}-macos-arm64.zip" ;;
+              mv "dist/EDCMDR-${VERSION}-macos.app" dist/EDCMDR.app
+              ditto -c -k --keepParent dist/EDCMDR.app "release/EDCMDR-${VERSION}-macos.zip" ;;
           esac
           ls -la release/
 
@@ -191,9 +191,9 @@ jobs:
             echo ""
             echo "| Platform | File |"
             echo "|---|---|"
-            echo "| Linux (x86_64) | \`EDCMDR-${VERSION}-linux-x86_64\` |"
-            echo "| Windows (x86_64) | \`EDCMDR-${VERSION}-windows-amd64.exe\` |"
-            echo "| macOS (Apple silicon) | \`EDCMDR-${VERSION}-macos-arm64.zip\` |"
+            echo "| Linux (x86_64) | \`EDCMDR-${VERSION}-linux\` |"
+            echo "| Windows (x86_64) | \`EDCMDR-${VERSION}-windows.exe\` |"
+            echo "| macOS (Apple silicon) | \`EDCMDR-${VERSION}-macos.zip\` |"
             echo ""
             echo "Also at https://edcmdr.com/client. \`EDCMDR-${VERSION}.sha256\` lists every file by digest."
           } >> release-notes.md

@@ -6,8 +6,11 @@ Last updated: 20261123
 
 ## Unreleased
 
-### Added: EDSM and EDAstro uploads
-- New Integrations tab: per commander, send your journal to EDSM (with your EDSM API key) and exploration and travel events to EDAstro (no account; fleet carrier events optional).
+### Changed: simpler download names
+- `EDCMDR-<version>-linux`, `EDCMDR-<version>-windows.exe` and `EDCMDR-<version>-macos.zip`.
+
+### Added: EDDN, EDSM and EDAstro uploads
+- New Integrations tab: per commander, share markets, outfitting, shipyards and exploration with EDDN, send your journal to EDSM (with your EDSM API key), and send exploration and travel events to EDAstro (no account; fleet carrier events optional).
 - Off by default. Only what you play while the client runs is sent, never the imported history; Pause stops it.
 - Uploads go from your computer straight to each service. A batch that fails is kept and retried, including after a restart.
 - Not active when EDLD hosts the client: EDLD's own uploaders handle these there.

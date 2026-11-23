@@ -92,7 +92,7 @@ class Svc(BaseHTTPRequestHandler):
             Svc.fail -= 1
             return self._reply(503, b'busy')
         if self.headers.get('Content-Encoding') == 'gzip':
-            Svc.got.append(('edastro', json.loads(gzip.decompress(raw))))
+            Svc.got.append(('eddn' if self.path == '/eddn' else 'edastro', json.loads(gzip.decompress(raw))))
             return self._reply(200, b'{}')
         form = {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode()).items()}
         Svc.got.append(('edsm', form))
@@ -114,8 +114,8 @@ class TestIntegrations(unittest.TestCase):
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         base = f'http://127.0.0.1:{cls.srv.server_address[1]}'
         it.EDSM_DISCARD_URL, it.EDASTRO_INTEREST_URL = base + '/discard', base + '/interested'
-        it.EDSM.url, it.EDAstro.url = base + '/edsm', base + '/astro'
-        it.EDSM.gap = it.EDAstro.gap = 0.05
+        it.EDSM.url, it.EDAstro.url, it.EDDN.url = base + '/edsm', base + '/astro', base + '/eddn'
+        it.EDSM.gap = it.EDAstro.gap = it.EDDN.gap = 0.05
         it.Sender.retry_wait = 30
 
     @classmethod
@@ -199,6 +199,55 @@ class TestIntegrations(unittest.TestCase):
         h.live('F1', {'event': 'FSDJump'})
         time.sleep(0.3)
         self.assertEqual(Svc.got, [])
+
+    def test_eddn(self):
+        self.settings.set_integration('F1', 'eddn', {'enabled': True})
+        jd = self.dir / 'journals'
+        jd.mkdir()
+        (jd / 'Market.json').write_text(json.dumps({
+            'timestamp': 't', 'MarketID': 5, 'StationName': 'Galileo', 'StarSystem': 'Sol', 'Items': [
+                {'Name': '$gold_name;', 'Category': '$MARKET_category_metals;', 'MeanPrice': 1, 'BuyPrice': 2,
+                 'Stock': 3, 'StockBracket': 1, 'SellPrice': 4, 'Demand': 0, 'DemandBracket': 0},
+                {'Name': '$drones_name;', 'Category': '$MARKET_category_nonmarketable;', 'MeanPrice': 1,
+                 'BuyPrice': 1, 'Stock': 1, 'StockBracket': 1, 'SellPrice': 1, 'Demand': 0, 'DemandBracket': 0}]}))
+        h = self.hub()
+        h.observe('F1', {'event': 'LoadGame', 'Odyssey': True, 'Horizons': True})
+        h.live('F1', {'event': 'Scan', 'BodyName': 'Earth', 'SystemAddress': 10477373803, 'Latitude': 1,
+                      'Materials_Localised': 'x', 'timestamp': 't'})
+        h.live('F1', {'event': 'Docked', 'MarketID': 5, 'StationName': 'Galileo', 'StarSystem': 'Sol',
+                      'SystemAddress': 10477373803, 'timestamp': 't'})
+        h.live('F1', {'event': 'Market', 'MarketID': 5, 'timestamp': 't'}, jd)
+        h.live('F1', {'event': 'Market', 'MarketID': 5, 'timestamp': 't'}, jd)
+        got = [g[1] for g in self.wait(3)]
+        time.sleep(0.3)
+        self.assertEqual(len(Svc.got), 3, 'an unchanged market is sent once')
+        scan, docked, market = got
+        self.assertEqual(scan['$schemaRef'], 'https://eddn.edcd.io/schemas/journal/1')
+        self.assertEqual(scan['header']['uploaderID'], 'Tester')
+        self.assertEqual(scan['header']['softwareName'], 'EDCMDR-client')
+        m = scan['message']
+        self.assertEqual((m['StarSystem'], m['StarPos'], m['odyssey']), ('Sol', [0, 0, 0], True))
+        self.assertNotIn('Latitude', m)
+        self.assertNotIn('Materials_Localised', m)
+        self.assertEqual(market['$schemaRef'], 'https://eddn.edcd.io/schemas/commodity/3')
+        self.assertEqual([c['name'] for c in market['message']['commodities']], ['gold'])
+
+    def test_eddn_builder(self):
+        from edcmdr import eddn
+        b = eddn.Builder()
+        b.track({'event': 'FSDJump', 'StarSystem': 'A', 'SystemAddress': 1, 'StarPos': [1, 2, 3]})
+        sig = {'event': 'FSSSignalDiscovered', 'SystemAddress': 1, 'SignalName': 'X', 'timestamp': 't'}
+        miss = dict(sig, USSType='$USS_Type_MissionTarget;')
+        self.assertEqual(b.messages(sig, None) + b.messages(miss, None), [])
+        out = b.messages({'event': 'Music'}, None)
+        self.assertEqual(out[0][0], 'https://eddn.edcd.io/schemas/fsssignaldiscovered/1')
+        self.assertEqual(out[0][1]['signals'], [{'SignalName': 'X', 'timestamp': 't'}])
+        b.track({'event': 'FSDJump', 'StarSystem': 'B', 'SystemAddress': 2, 'StarPos': [4, 5, 6]})
+        late = b.messages({'event': 'FSSDiscoveryScan', 'SystemAddress': 1, 'Progress': 0.5}, None)[0][1]
+        self.assertEqual((late['StarSystem'], late.get('Progress')), ('A', None), 'a late event keeps its own system')
+        self.assertEqual(b.messages({'event': 'NavBeaconScan', 'SystemAddress': 99}, None), [])
+        self.assertEqual(b.messages({'event': 'MarketSell', 'IllegalGoods': True, 'Type': 'x', 'SellPrice': 1}, None),
+                         [], 'black market needs a station')
 
     def test_retry_then_spill(self):
         self.settings.set_integration('F1', 'edastro', {'enabled': True})

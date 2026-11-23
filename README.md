@@ -27,11 +27,12 @@ client in Go; one of them becomes the client.
 
 Optional, per commander, off by default (Settings → Integrations):
 
+- **EDDN**: markets, outfitting, shipyards and exploration, on EDDN's schemas, under your commander name.
 - **EDSM**: your journal, sent under your EDSM account with your EDSM API key.
 - **EDAstro**: exploration and travel events, no account; fleet carrier events only if you tick them.
 
 Only events from play while the client runs are sent, straight from your computer to the service.
-EDDN, Inara and Frontier CAPI follow.
+Inara and Frontier CAPI follow.
 
 ## Run from source
 
@@ -95,7 +96,8 @@ EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # p
     edcmdr/state.py      journal events → protocol categories
     edcmdr/proto.py      signed pushes, signed-reply checks
     edcmdr/uplink.py     the engine: sharing, debounce, retries
-    edcmdr/integrations.py  optional EDSM and EDAstro uploads
+    edcmdr/integrations.py  optional EDDN, EDSM and EDAstro uploads
+    edcmdr/eddn.py       EDDN messages from journal events
     edcmdr/ui/           tray and settings window
     protocol/v1/         spec.json, vendored from the EDCMDR server repo (protocol.lock)
     scripts/build.py     one-file build with the build key injected

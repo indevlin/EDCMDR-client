@@ -1,4 +1,4 @@
-"""Optional uploads to community services, straight from this computer: EDSM and EDAStro.
+"""Optional uploads to community services, straight from this computer: EDDN, EDSM and EDAstro.
 
 Each is off until switched on for a commander in the Integrations tab. Only events read after the
 history import are sent (what you play while the client runs); nothing from the import is. Events
@@ -16,7 +16,7 @@ import urllib.request
 from collections import deque
 from pathlib import Path
 
-from . import NAME, VERSION, paths
+from . import NAME, VERSION, eddn, paths
 
 log = logging.getLogger('edcmdr')
 
@@ -41,6 +41,7 @@ EDASTRO_FALLBACK = frozenset({
     'CarrierStatus', 'CarrierJumpRequest'})
 
 SERVICES = {
+    'eddn': {'label': 'EDDN', 'keys': {'enabled': False}},
     'edsm': {'label': 'EDSM', 'keys': {'enabled': False, 'api_key': ''}},
     'edastro': {'label': 'EDAstro', 'keys': {'enabled': False, 'carrier': False}},
 }
@@ -270,6 +271,18 @@ class EDAstro(Sender):
                   {'Content-Type': 'application/json', 'Content-Encoding': 'gzip'})
 
 
+class EDDN(Sender):
+    name = 'eddn'
+    batch_max = 1
+    gap = 0.2
+    url = eddn.ENDPOINT
+
+    def send(self, group: list, batch: list[dict]) -> None:
+        for env in batch:
+            self.post(self.url, gzip.compress(json.dumps(env, separators=(',', ':')).encode()),
+                      {'Content-Type': 'application/json', 'Content-Encoding': 'gzip'})
+
+
 class Hub:
     """Routes live journal events to the services each commander has switched on."""
 
@@ -279,6 +292,7 @@ class Hub:
         self.trackers: dict[str, Tracker] = {}
         self.names: dict[str, str] = {}
         self.senders: dict[str, Sender] = {}
+        self.builders: dict[str, eddn.Builder] = {}
         self.lock = threading.Lock()
 
     @staticmethod
@@ -293,24 +307,44 @@ class Hub:
     def _sender(self, service: str) -> Sender:
         with self.lock:
             if service not in self.senders:
-                self.senders[service] = {'edsm': EDSM, 'edastro': EDAstro}[service](self.spill_dir)
+                self.senders[service] = {'eddn': EDDN, 'edsm': EDSM, 'edastro': EDAstro}[service](self.spill_dir)
             return self.senders[service]
 
     def observe(self, fid: str, ev: dict) -> None:
-        """Every event, history included: keeps each commander's position and game version current."""
+        """An event from the history import: keeps each commander's position and game version current."""
+        self._track(fid, ev)
+        self.builders.setdefault(fid, eddn.Builder()).track(ev)
+
+    def _track(self, fid: str, ev: dict) -> Tracker:
         t = self.trackers.setdefault(fid, Tracker())
         t.update(ev)
         if ev.get('event') in ('Commander', 'LoadGame'):
             name = ev.get('Name') or ev.get('Commander')
             if name:
                 self.names[fid] = name
+        return t
 
-    def live(self, fid: str, ev: dict) -> None:
+    def live(self, fid: str, ev: dict, journal_dir: Path | None = None) -> None:
         """An event read after the history import: send it to each service switched on for this commander."""
-        t = self.trackers.get(fid) or Tracker()
+        t = self._track(fid, ev)
+        b = self.builders.setdefault(fid, eddn.Builder())
+        try:
+            self._send(fid, ev, t, b, journal_dir)
+        finally:
+            b.track(ev)
+
+    def _send(self, fid: str, ev: dict, t: Tracker, b: eddn.Builder, journal_dir: Path | None) -> None:
         if beta(t.gameversion):
             return
         clean = {k: v for k, v in ev.items() if not k.startswith('_')}
+        if self.config(self.settings, fid, 'eddn')['enabled'] and self.names.get(fid) and t.gameversion:
+            msgs = b.messages(clean, journal_dir)
+            if msgs:
+                s = self._sender('eddn')
+                header = {'uploaderID': self.names[fid], 'softwareName': NAME, 'softwareVersion': VERSION,
+                          'gameversion': t.gameversion, 'gamebuild': t.build}
+                for ref, msg in msgs:
+                    s.push(('',), {'$schemaRef': ref, 'header': header, 'message': msg})
         edsm = self.config(self.settings, fid, 'edsm')
         if edsm['enabled'] and edsm['api_key'] and self.names.get(fid) and t.gameversion:
             s = self._sender('edsm')

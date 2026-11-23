@@ -368,6 +368,13 @@ class SettingsWindow(QWidget):
         self.iwho.currentIndexChanged.connect(self._load_integrations)
         top.addWidget(self.iwho, 1)
         lay.addLayout(top)
+        net = QGroupBox('EDDN, Elite Dangerous Data Network')
+        n = QFormLayout(net)
+        self.eddn_on = QCheckBox('Share markets, outfitting, shipyards and exploration with EDDN')
+        n.addRow(self.eddn_on)
+        n.addRow(note('EDDN passes these on to the community tools (Inara, Spansh, EDSM and others). '
+                      'Messages carry your commander name, as EDDN requires.'))
+        lay.addWidget(net)
         edsm = QGroupBox('EDSM, Elite Dangerous Star Map')
         f = QFormLayout(edsm)
         self.edsm_on = QCheckBox('Send my journal to EDSM, under my EDSM account')
@@ -385,7 +392,7 @@ class SettingsWindow(QWidget):
         g.addRow(self.astro_on)
         g.addRow(self.astro_carrier)
         lay.addWidget(astro)
-        for x in (self.edsm_on, self.astro_on, self.astro_carrier):
+        for x in (self.eddn_on, self.edsm_on, self.astro_on, self.astro_carrier):
             x.toggled.connect(self._save_integrations)
         self.edsm_key.editingFinished.connect(self._save_integrations)
         self.int_status = QLabel('')
@@ -400,6 +407,7 @@ class SettingsWindow(QWidget):
             return
         from ..integrations import Hub
         self._int_loading = True
+        self.eddn_on.setChecked(Hub.config(self.engine.settings, fid, 'eddn')['enabled'])
         e = Hub.config(self.engine.settings, fid, 'edsm')
         a = Hub.config(self.engine.settings, fid, 'edastro')
         self.edsm_on.setChecked(e['enabled'])
@@ -412,6 +420,7 @@ class SettingsWindow(QWidget):
         fid = self.iwho.currentData()
         if not fid or getattr(self, '_int_loading', False):
             return
+        self.engine.settings.set_integration(fid, 'eddn', {'enabled': self.eddn_on.isChecked()})
         self.engine.settings.set_integration(fid, 'edsm', {'enabled': self.edsm_on.isChecked(),
                                                            'api_key': self.edsm_key.text().strip()})
         self.engine.settings.set_integration(fid, 'edastro', {'enabled': self.astro_on.isChecked(),
@@ -486,8 +495,8 @@ class SettingsWindow(QWidget):
             self._load_integrations()
         if hasattr(self, 'int_status') and self.engine.hub is not None:
             st = self.engine.hub.status()
-            self.int_status.setText('  ·  '.join(f'{k.upper() if k == "edsm" else "EDAstro"}: {v}'
-                                                for k, v in sorted(st.items())))
+            label = {'eddn': 'EDDN', 'edsm': 'EDSM', 'edastro': 'EDAstro'}
+            self.int_status.setText('  ·  '.join(f'{label[k]}: {v}' for k, v in sorted(st.items())))
         has = bool(cm)
         for x in (self.open_btn, self.forget_btn, self.verify_btn, self.portrait_btn):
             x.setEnabled(has)
