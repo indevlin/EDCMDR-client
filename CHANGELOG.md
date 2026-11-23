@@ -4,7 +4,7 @@ Last updated: 20261123
 
 ---
 
-## Released in 20261123
+## Unreleased
 
 ### Added: the EDCMDR client
 
