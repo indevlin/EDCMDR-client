@@ -72,6 +72,152 @@ class TestJournal(unittest.TestCase):
         self.assertEqual(c.mode, 'Group', 'new file assigned once its Commander line appears')
 
 
+class Svc(BaseHTTPRequestHandler):
+    """Stands in for EDSM and EDAstro."""
+    got: list = []
+    fail = 0
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        body = {'/discard': ['Music', 'Friends'], '/interested': ['FSDJump', 'Scan', 'CarrierStatus']}
+        self._reply(200, json.dumps(body.get(self.path, [])).encode())
+
+    def do_POST(self):
+        import gzip
+        import urllib.parse
+        raw = self.rfile.read(int(self.headers['Content-Length']))
+        if Svc.fail:
+            Svc.fail -= 1
+            return self._reply(503, b'busy')
+        if self.headers.get('Content-Encoding') == 'gzip':
+            Svc.got.append(('edastro', json.loads(gzip.decompress(raw))))
+            return self._reply(200, b'{}')
+        form = {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode()).items()}
+        Svc.got.append(('edsm', form))
+        self._reply(200, json.dumps({'msgnum': 100, 'msg': 'OK'}).encode())
+
+    def _reply(self, code, body):
+        self.send_response(code)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class TestIntegrations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from edcmdr import integrations as it
+        cls.it = it
+        cls.srv = ThreadingHTTPServer(('127.0.0.1', 0), Svc)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        base = f'http://127.0.0.1:{cls.srv.server_address[1]}'
+        it.EDSM_DISCARD_URL, it.EDASTRO_INTEREST_URL = base + '/discard', base + '/interested'
+        it.EDSM.url, it.EDAstro.url = base + '/edsm', base + '/astro'
+        it.EDSM.gap = it.EDAstro.gap = 0.05
+        it.Sender.retry_wait = 30
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def setUp(self):
+        Svc.got, Svc.fail = [], 0
+        self.dir = Path(tempfile.mkdtemp(dir=TMP))
+        self.settings = Settings(self.dir / 'settings.json')
+
+    def wait(self, n, t=5):
+        end = time.time() + t
+        while len(Svc.got) < n and time.time() < end:
+            time.sleep(0.02)
+        return Svc.got
+
+    def hub(self):
+        h = self.it.Hub(self.settings, self.dir / 'q')
+        self.addCleanup(h.shutdown)
+        for ev in ({'event': 'Fileheader', 'gameversion': '4.2.1.0', 'build': 'r1'},
+                   {'event': 'Commander', 'FID': 'F1', 'Name': 'Tester'},
+                   {'event': 'FSDJump', 'StarSystem': 'Sol', 'SystemAddress': 10477373803, 'StarPos': [0, 0, 0]}):
+            h.observe('F1', ev)
+        return h
+
+    def test_tracker(self):
+        t = self.it.Tracker()
+        t.update({'event': 'Docked', 'StarSystem': 'Sol', 'MarketID': 7, 'StationName': 'Abraham Lincoln'})
+        self.assertEqual(t.annotate({'event': 'MarketSell'})['_marketId'], 7)
+        t.update({'event': 'Undocked'})
+        self.assertNotIn('_marketId', t.annotate({'event': 'X'}))
+        self.assertEqual(t.annotate({'event': 'X'})['_systemName'], 'Sol')
+        self.assertTrue(self.it.beta('4.0.0.100 beta') and self.it.beta('3.8.0.407'))
+
+    def test_off_sends_nothing(self):
+        h = self.hub()
+        h.live('F1', {'event': 'FSDJump', 'StarSystem': 'Sol'})
+        time.sleep(0.3)
+        self.assertEqual(Svc.got, [])
+        self.assertFalse(h.any_on())
+
+    def test_edsm(self):
+        self.settings.set_integration('F1', 'edsm', {'enabled': True, 'api_key': 'k123'})
+        h = self.hub()
+        h._sender('edsm')
+        time.sleep(0.2)
+        for ev in ({'event': 'Scan', 'BodyName': 'Earth'}, {'event': 'Music', 'MusicTrack': 'x'},
+                   {'event': 'Shutdown'}, {'event': 'Docked', 'StarSystem': 'Sol', '_logtime': 1}):
+            h.live('F1', ev)
+        kind, form = self.wait(1)[0]
+        self.assertEqual(kind, 'edsm')
+        self.assertEqual((form['commanderName'], form['apiKey'], form['fromSoftware'], form['fromGameVersion']),
+                         ('Tester', 'k123', 'EDCMDR-client', '4.2.1.0'))
+        msg = json.loads(form['message'])
+        self.assertEqual([m['event'] for m in msg], ['Scan', 'Docked'])
+        self.assertEqual(msg[0]['_systemName'], 'Sol')
+        self.assertNotIn('_logtime', msg[1])
+
+    def test_edsm_needs_key(self):
+        self.settings.set_integration('F1', 'edsm', {'enabled': True, 'api_key': ''})
+        self.hub().live('F1', {'event': 'Scan'})
+        time.sleep(0.3)
+        self.assertEqual(Svc.got, [])
+
+    def test_edastro_and_carrier(self):
+        self.settings.set_integration('F1', 'edastro', {'enabled': True, 'carrier': False})
+        h = self.hub()
+        h._sender('edastro')
+        time.sleep(0.2)
+        for e in ('FSDJump', 'CarrierStatus', 'Docked', 'Scan'):
+            h.live('F1', {'event': e})
+        kind, batch = self.wait(1)[0]
+        self.assertEqual(kind, 'edastro')
+        self.assertEqual([b['event'] for b in batch], ['FSDJump', 'Scan'])
+
+    def test_beta_skipped(self):
+        self.settings.set_integration('F1', 'edastro', {'enabled': True})
+        h = self.hub()
+        h.observe('F1', {'event': 'LoadGame', 'gameversion': '4.3.0.1 beta'})
+        h.live('F1', {'event': 'FSDJump'})
+        time.sleep(0.3)
+        self.assertEqual(Svc.got, [])
+
+    def test_retry_then_spill(self):
+        self.settings.set_integration('F1', 'edastro', {'enabled': True})
+        Svc.fail = 1
+        h = self.hub()
+        time.sleep(0.2)
+        h.live('F1', {'event': 'FSDJump'})
+        time.sleep(0.4)
+        s = h.senders['edastro']
+        self.assertIn('retry', s.status)
+        h.shutdown()
+        self.assertTrue(s.spill.exists())
+        h2 = self.it.Hub(self.settings, self.dir / 'q')
+        self.addCleanup(h2.shutdown)
+        h2._sender('edastro')
+        self.assertEqual(self.wait(1)[0][1][0]['event'], 'FSDJump')
+        self.assertFalse(s.spill.exists())
+
+
 class TestPublisherLock(unittest.TestCase):
     def test_one_publisher(self):
         from edcmdr.single import PublisherLock

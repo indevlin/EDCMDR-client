@@ -13,6 +13,7 @@ import time
 from typing import Callable
 
 from . import NAME, VERSION, journal, keys
+from .integrations import Hub
 from .single import PublisherLock
 from .config import SPEC, Settings
 from .proto import Client, ProtoError
@@ -72,6 +73,9 @@ class Engine:
         self.cmdrs: dict[str, Commander] = {}
         self.rt: dict[str, Runtime] = {}
         self.watcher = journal.Watcher(settings.journal_dirs, self._event, EVENTS)
+        self.needles = self.watcher.needles
+        # Hosts (EDLD) run their own uploaders; the client's stay off there.
+        self.hub = Hub(settings) if NAME == 'EDCMDR-client' else None
         self.state = 'paused' if settings.data.get('start_paused') else 'running'
         self.status = 'Starting'
         self.server: dict | None = None
@@ -98,6 +102,8 @@ class Engine:
         if self.thread:
             self.thread.join(5)
         self.publisher.release()
+        if self.hub is not None:
+            self.hub.shutdown()
 
     def pause(self) -> None:
         self._set_state('paused')
@@ -285,6 +291,10 @@ class Engine:
         if c is None:
             c = self.cmdrs[fid] = Commander(fid)
         c.handle(ev)
+        if self.hub is not None:
+            self.hub.observe(fid, ev)
+            if self.watcher.imported and self.state == 'running':
+                self.hub.live(fid, ev)
 
     def run(self) -> None:
         while not self._stop.is_set():
@@ -308,6 +318,8 @@ class Engine:
             state = self.state
             if state != 'stopped':
                 first = not self.watcher.imported
+                if self.hub is not None and self.watcher.imported:
+                    self.watcher.needles = None if self.hub.any_on() else self.needles
                 self.watcher.poll()
                 if first:
                     for c in self.cmdrs.values():
