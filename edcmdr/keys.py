@@ -11,7 +11,7 @@ from . import paths
 
 # Server public keys (current, next). bin/keygen.php server prints them.
 SERVER_KEYS: list[str] = [
-    # 'REPLACE_WITH_SERVER_PUBLIC_KEY',
+    'qrnjVvjBGHZq9zOAkUrrxpTPy9YrvtAJXrxtvSSu60E',
 ]
 
 
