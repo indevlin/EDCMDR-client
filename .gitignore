@@ -37,3 +37,6 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Protocol pin; overrides a global *.lock ignore
+!protocol.lock
