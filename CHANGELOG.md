@@ -6,6 +6,8 @@ Last updated: 20261123
 
 ## Unreleased
 
+## Released in 20261123
+
 ### Added: the EDCMDR client
 
 The first release. The client reads the Elite Dangerous journal folders you
