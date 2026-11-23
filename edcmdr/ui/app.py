@@ -1,4 +1,5 @@
 """Tray icon and menu: Pause, Resume, Stop, Push now, Settings, Exit."""
+import signal
 import sys
 import time
 
@@ -92,7 +93,7 @@ class Tray:
         self.app.quit()
 
 
-def run(settings: Settings) -> int:
+def run(settings: Settings, show_settings: bool = False) -> int:
     app = QApplication(sys.argv)
     app.setApplicationName('EDCMDR')
     app.setQuitOnLastWindowClosed(False)
@@ -102,4 +103,14 @@ def run(settings: Settings) -> int:
     if not tray.has_tray:
         app.setQuitOnLastWindowClosed(True)
     engine.start()
-    return app.exec()
+    # Ctrl-C and SIGTERM exit cleanly: the timer lets Python run its signal handlers inside Qt's loop.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: tray.exit())
+    tick = QTimer()
+    tick.timeout.connect(lambda: None)
+    tick.start(250)
+    if show_settings or not tray.has_tray:
+        tray.show_settings()
+    code = app.exec()
+    tick.stop()
+    return code

@@ -2,6 +2,7 @@
 
 # Build key: injected at build time, never committed
 edcmdr/_build_secret.py
+edcmdr/_build_info.py
 *.key
 *.pem
 .env

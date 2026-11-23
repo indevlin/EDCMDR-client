@@ -9,12 +9,15 @@ Without one the build is unofficial: it runs, but EDCMDR refuses its pushes.
 """
 import argparse
 import os
+import time
+import re
 import platform
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+INFO = ROOT / 'edcmdr' / '_build_info.py'
 SECRET = ROOT / 'edcmdr' / '_build_secret.py'
 QT_EXCLUDES = ['QtNetwork', 'QtQml', 'QtQuick', 'QtSql', 'QtTest', 'QtXml', 'QtOpenGL', 'QtPdf', 'QtSvg',
                'QtWebEngineCore', 'QtMultimedia', 'QtDBus', 'QtConcurrent', 'QtPrintSupport', 'QtDesigner']
@@ -28,12 +31,25 @@ def build_key() -> str | None:
     return f.read_text().strip() if f.exists() else None
 
 
+def build_version() -> str:
+    """$EDCMDR_VERSION, else a YYYYMMDD tag on HEAD, else today (UTC)."""
+    v = os.environ.get('EDCMDR_VERSION', '')
+    if v:
+        if not re.fullmatch(r'\d{8}', v):
+            sys.exit(f'EDCMDR_VERSION {v!r} is not YYYYMMDD')
+        return v
+    tags = subprocess.run(['git', 'tag', '--points-at', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    dated = sorted(t for t in tags if re.fullmatch(r'\d{8}', t))
+    return dated[-1] if dated else time.strftime('%Y%m%d', time.gmtime())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--release', action='store_true')
     args = ap.parse_args()
     sys.path.insert(0, str(ROOT))
-    from edcmdr import VERSION, keys
+    from edcmdr import keys
+    version = build_version()
 
     key = build_key()
     if args.release and not key:
@@ -46,7 +62,7 @@ def main() -> int:
 
     sep = ';' if os.name == 'nt' else ':'
     cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--windowed',
-           '--name', f'EDCMDR-{VERSION}-{platform.system().lower()}-{platform.machine().lower()}',
+           '--name', f'EDCMDR-{version}-{platform.system().lower()}-{platform.machine().lower()}',
            '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
            '--add-data', f'LICENSE{sep}.']
@@ -54,6 +70,8 @@ def main() -> int:
         cmd += ['--exclude-module', f'PySide6.{m}']
     cmd.append('edcmdr_client.py')
     try:
+        INFO.write_text(f"VERSION = '{version}'\n")
+        print(f'building version {version}')
         if key:
             SECRET.write_text(f"BUILD_KEY = '{key}'\n")
         else:
@@ -61,6 +79,7 @@ def main() -> int:
         subprocess.run(cmd, cwd=ROOT, check=True)
     finally:
         SECRET.unlink(missing_ok=True)
+        INFO.unlink(missing_ok=True)
     return 0
 
 

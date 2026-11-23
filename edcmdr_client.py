@@ -17,6 +17,7 @@ from edcmdr.config import Settings
 def main() -> int:
     ap = argparse.ArgumentParser(prog='edcmdr')
     ap.add_argument('--headless', action='store_true')
+    ap.add_argument('--settings', action='store_true', help='open the settings window at start')
     ap.add_argument('--once', action='store_true')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--journal', action='append', help='journal directory (repeatable; replaces saved ones for this run)')
@@ -54,7 +55,8 @@ def main() -> int:
         return 0
 
     from edcmdr.ui.app import run
-    return run(settings)
+    shared = any(any((c.get('prefs') or {}).get('share', {}).values()) for c in settings.data.get('commanders', {}).values())
+    return run(settings, show_settings=args.settings or not shared or not settings.journal_dirs)
 
 
 if __name__ == '__main__':

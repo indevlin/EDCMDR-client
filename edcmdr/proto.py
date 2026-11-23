@@ -70,6 +70,8 @@ class Client:
 
     def _open(self, req: urllib.request.Request) -> tuple[int, bytes, dict]:
         opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.ctx))
+        if not req.has_header('User-agent'):
+            req.add_header('User-Agent', f'{NAME}/{VERSION}')
         try:
             with opener.open(req, timeout=TIMEOUT) as r:
                 return r.status, r.read(1 << 20), dict(r.headers)
@@ -78,11 +80,16 @@ class Client:
         except (urllib.error.URLError, OSError) as e:
             raise ProtoError('net', f'Cannot reach EDCMDR: {getattr(e, "reason", e)}') from e
 
-    def _verify(self, body: bytes, headers: dict) -> dict:
+    def _verify(self, body: bytes, headers: dict, status: int = 0) -> dict:
         h = {k.lower(): v for k, v in headers.items()}
-        pub = self.server_keys.get(h.get('x-edcmdr-server', ''))
+        kid = h.get('x-edcmdr-server', '')
+        if not kid:
+            via = h.get('server', '') or 'unknown'
+            raise ProtoError('reply', f'The reply did not come from EDCMDR (HTTP {status} from {via}, unsigned).')
+        pub = self.server_keys.get(kid)
         if pub is None:
-            raise ProtoError('reply', 'The reply was not signed by a known EDCMDR key.')
+            known = ', '.join(self.server_keys) or 'none: this build has no pinned server key'
+            raise ProtoError('reply', f'The reply was signed by key {kid}, which this build does not know (known: {known}).')
         try:
             pub.verify(keys.unb64u(h.get('x-edcmdr-reply-sig', '')), body)
         except (InvalidSignature, ValueError) as e:
@@ -98,7 +105,7 @@ class Client:
     def hello(self) -> dict:
         n = keys.b64u(secrets.token_bytes(18))
         status, body, headers = self._open(urllib.request.Request(f'{self.base}/api/v1/hello?n={n}'))
-        j = self._verify(body, headers)
+        j = self._verify(body, headers, status)
         if j.get('n') != n:
             raise ProtoError('reply', 'The reply does not answer this request.')
         if isinstance(j.get('time'), int):
@@ -130,7 +137,7 @@ class Client:
             'X-EDCMDR-Build': f'{build_id}.{keys.b64u(self.build.sign(raw))}',
         })
         status, body_bytes, headers = self._open(req)
-        j = self._verify(body_bytes, headers)
+        j = self._verify(body_bytes, headers, status)
         if j.get('re') != keys.b64u(hashlib.sha256(raw).digest())[:22]:
             raise ProtoError('reply', 'The reply does not answer this push.')
         if not j.get('ok'):

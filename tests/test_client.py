@@ -119,6 +119,7 @@ class Fake(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        Fake.agent = self.headers.get('User-Agent', '')
         n = self.path.split('n=')[1]
         self._reply({'ok': True, 'kind': 'hello', 'n': n if Fake.mode != 'nonce' else 'x' * 20, 'protocols': [1],
                      'time': int(time.time()) + 100})
@@ -163,6 +164,17 @@ class TestProto(unittest.TestCase):
     def test_hello_sets_clock(self):
         self.c.hello()
         self.assertGreaterEqual(self.c.clock_offset, 99)
+
+    def test_every_request_names_the_client(self):
+        self.c.hello()
+        self.assertTrue(Fake.agent.startswith('EDCMDR-client/'), Fake.agent)
+
+    def test_unsigned_reply_says_so(self):
+        Fake.mode = 'unsigned'
+        with self.assertRaises(ProtoError) as e:
+            self.c.push(self.k, 'F1', 'prefs', {})
+        self.assertIn('HTTP 200', str(e.exception))
+        self.assertIn('unsigned', str(e.exception))
 
     def test_hello_nonce_mismatch(self):
         Fake.mode = 'nonce'

@@ -27,7 +27,8 @@ client in Go; one of them becomes the client.
 
 ```sh
 python3 -m pip install -r requirements.txt
-python3 edcmdr_client.py            # tray
+python3 edcmdr_client.py            # tray (Settings opens by itself until something is shared)
+python3 edcmdr_client.py --settings # tray, with the settings window open
 python3 edcmdr_client.py --list     # commanders found in your journals
 python3 edcmdr_client.py --headless # no window, logs to the terminal
 ```
@@ -54,10 +55,11 @@ python3 scripts/build.py --release  # dist/EDCMDR-<version>-<os>-<arch>
 ```
 
 `--release` refuses to build without the build key and the pinned server key
-in `edcmdr/keys.py`. PyInstaller builds for the system it runs on; Windows and
-macOS binaries come from the Release workflow: push a tag equal to `VERSION`
-in `edcmdr/__init__.py` (`YYYYMMDD`), or run it by hand with `dry_run` to get
-the binaries as run artefacts without publishing. edcmdr.com mirrors the
+in `edcmdr/keys.py`. The version is `YYYYMMDD`: `$EDCMDR_VERSION`, else a
+`YYYYMMDD` tag on the commit being built, else today's date (UTC). PyInstaller
+builds for the system it runs on; Windows and macOS binaries come from the
+Release workflow: push a `YYYYMMDD` tag on `main`, or run it by hand with
+`dry_run` to get the binaries as run artefacts without publishing. edcmdr.com mirrors the
 latest published release within the hour.
 
 ## Tests
