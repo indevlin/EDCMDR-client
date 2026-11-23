@@ -278,7 +278,7 @@ class TestEndToEnd(unittest.TestCase):
         ts.Frontier.calls.clear()
         e.rt['F1000002'].verify_next = 0
         e.tick()
-        self.assertEqual([k for k, _ in ts.Frontier.calls], ['token', 'profile'], 'client exchanges, server reads')
+        self.assertEqual([k for k, _ in ts.Frontier.calls], ['token', 'journal', 'profile'], 'client exchanges, server reads')
         c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
         self.assertIsNone(c['verify'])
         self.assertIsNone(e.rt['F1000002'].vtoken, 'the token is dropped')

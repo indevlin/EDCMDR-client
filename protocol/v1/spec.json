@@ -49,7 +49,7 @@
     "not-enrolled": 403, "claimed": 403, "not-leader": 403,
     "upstream": 424, "portrait": 422,
     "method": 405,
-    "clock": 409, "replay": 409, "version": 409, "no-verification": 409, "different-commander": 409,
+    "clock": 409, "replay": 409, "version": 409, "no-verification": 409, "different-commander": 409, "no-journal": 409,
     "size": 413,
     "implausible": 422,
     "rate": 429,

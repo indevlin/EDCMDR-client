@@ -24,6 +24,7 @@ DEBOUNCE = 60
 PRESENCE_EVERY = 300
 HELLO_EVERY = 6 * 3600
 VERIFY_POLL = 4
+TRANSIENT = ('net', 'reply', 'rate', 'maintenance', 'clock', 'server', 'replay')
 VERIFY_NOTE = 600
 BACKOFF_MIN, BACKOFF_MAX = 30, 900
 
@@ -175,10 +176,10 @@ class Engine:
             if e.code == 'upstream':
                 r.verify_note = (f'Verifying: {e} Retrying.', time.time() + VERIFY_NOTE)
                 return
-            if e.code in ('frontier', 'different-commander', 'no-verification', 'version', 'unconfigured'):
-                self._verify_end(r, str(e))
-                return
-            raise
+            if e.code in TRANSIENT:
+                raise
+            self._verify_end(r, str(e))
+            return
         self._verify_end(r, None)
         r.enrolled, r.verified = True, True
         r.pub_id = j.get('pub_id') or r.pub_id

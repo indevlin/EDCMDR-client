@@ -404,7 +404,9 @@ class SettingsWindow(QWidget):
                 st = 'Not shared'
             ago = '—' if not c['last_push'] else f"{int((time.time() - c['last_push']) // 60)} min ago"
             for col, v in enumerate([f"CMDR {c['name']}", st, ago]):
-                self.table.setItem(i, col, QTableWidgetItem(v))
+                item = QTableWidgetItem(v)
+                item.setToolTip(v)
+                self.table.setItem(i, col, item)
         if 0 <= sel < len(cm):
             self.table.selectRow(sel)
         fids = [c['fid'] for c in cm]
