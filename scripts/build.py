@@ -32,7 +32,7 @@ def build_key() -> str | None:
 
 
 def build_version() -> str:
-    """$EDCMDR_VERSION, else a YYYYMMDD tag on HEAD, else today (UTC)."""
+    """$EDCMDR_VERSION, else a YYYYMMDD tag on HEAD, else the version file, else today (UTC)."""
     v = os.environ.get('EDCMDR_VERSION', '')
     if v:
         if not re.fullmatch(r'\d{8}', v):
@@ -40,7 +40,11 @@ def build_version() -> str:
         return v
     tags = subprocess.run(['git', 'tag', '--points-at', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.split()
     dated = sorted(t for t in tags if re.fullmatch(r'\d{8}', t))
-    return dated[-1] if dated else time.strftime('%Y%m%d', time.gmtime())
+    if dated:
+        return dated[-1]
+    f = ROOT / 'version'
+    v = f.read_text().strip() if f.exists() else ''
+    return v if re.fullmatch(r'\d{8}', v) else time.strftime('%Y%m%d', time.gmtime())
 
 
 def main() -> int:

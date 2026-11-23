@@ -56,11 +56,18 @@ python3 scripts/build.py --release  # dist/EDCMDR-<version>-<os>-<arch>
 
 `--release` refuses to build without the build key and the pinned server key
 in `edcmdr/keys.py`. The version is `YYYYMMDD`: `$EDCMDR_VERSION`, else a
-`YYYYMMDD` tag on the commit being built, else today's date (UTC). PyInstaller
-builds for the system it runs on; Windows and macOS binaries come from the
-Release workflow: push a `YYYYMMDD` tag on `main`, or run it by hand with
-`dry_run` to get the binaries as run artefacts without publishing. edcmdr.com mirrors the
-latest published release within the hour.
+`YYYYMMDD` tag on the commit being built, else the `version` file, else
+today's date (UTC). PyInstaller builds for the system it runs on; Windows and
+macOS binaries come from the Release workflow.
+
+## Releases
+
+Work lands on `dev`. A release writes the date to `version`, merges `dev` into
+`main`, tags `main` `YYYYMMDD` (annotated) and pushes the tag; the Release
+workflow builds Linux, Windows and macOS binaries from the tag and publishes
+them, with a SHA-256 manifest. Changes are recorded in `CHANGELOG.md`. Run the
+workflow by hand with `dry_run` to get the binaries as run artefacts without
+publishing. edcmdr.com mirrors the latest published release within the hour.
 
 ## Tests
 
