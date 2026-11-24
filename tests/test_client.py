@@ -639,6 +639,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertTrue(kept['token_url'].endswith('/token'))
         self.assertTrue(c['verified'] and c['enrolled'], c)
         self.assertIsNone(c['blocked'])
+        self.assertEqual(c['leader_of'], 4343, 'the Squadron tab shows straight after verifying')
         with self.assertRaises(ProtoError) as err:
             Client(self.base).push(holder.key, 'F1000002', 'prefs', {})
         self.assertEqual(err.exception.code, 'not-enrolled', 'the earlier installation is revoked')
@@ -650,7 +651,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(c['leader_of'], 4343)
         e.save_squadron('F1000002', {'home_system': 'Deriso', 'power': 'Nakato Kaine', 'factions': ['Test Co'],
                                      'recruiting': 'open', 'tagline': 'Bravo'})
-        st, html, _ = ts.request('/squadron/4343/bravo-wing')
+        st, html, _ = ts.request('/squad/brv')
         self.assertIn('Deriso', html)
         self.assertIn('Nakato Kaine', html)
         jpg = TMP / 'codex.jpg'
@@ -658,10 +659,9 @@ class TestEndToEnd(unittest.TestCase):
         subprocess.run(['php', str(Path(os.environ['EDCMDR_SERVER_REPO']).expanduser() / 'tests/make_codex.php'), str(jpg)], check=True)
         url = e.push_portrait('F1000002', jpg.read_bytes())
         self.assertRegex(url, r'^/p/[a-z2-7]{10,12}-1\.webp$')
-        st, html, _ = ts.request('/squadron/4343/bravo-wing')
+        st, html, _ = ts.request('/squad/brv')
         self.assertNotIn('BRAVO TWO', html, 'membership not shared, so not shown as leader')
-        pub = c_pub = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']['pub_id']
-        st, html, _ = ts.request(f'/cmdr/{pub}/bravo-two')
+        st, html, _ = ts.request('/cmdr/bravo-two')
         self.assertIn(url, html, 'commander page shows the portrait')
         os.environ['EDCMDR_HOME'] = str(TMP / 'home')
 
@@ -679,11 +679,11 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(e.status, 'Connected', e.status)
         self.assertTrue(snap['ALPHA ONE']['enrolled'])
         self.assertFalse(snap['BRAVO TWO']['enrolled'], 'nothing shared, nothing sent')
-        pub = snap['ALPHA ONE']['pub_id']
-        st, html, _ = self.ts.request(f'/cmdr/{pub}/alpha-one?tab=fleet')
+        self.assertTrue(snap['ALPHA ONE']['pub_id'])
+        st, html, _ = self.ts.request('/cmdr/alpha-one?tab=fleet')
         self.assertIn('SPECULATOR', html)
         self.assertNotIn('Test Port', html, 'location is delayed an hour')
-        st, html, _ = self.ts.request(f'/cmdr/{pub}/alpha-one?tab=statistics')
+        st, html, _ = self.ts.request('/cmdr/alpha-one?tab=statistics')
         self.assertNotIn('Current wealth', html)
         st, html, _ = self.ts.request('/squadron/42/test-wing')
         self.assertIn('Executive Director', html)
@@ -691,7 +691,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(e.status, 'Connected', 'second pass sends nothing new and stays connected')
         self._verify_takeover()
         self.assertIsNone(e.forget('F1000001'))
-        st, html, _ = self.ts.request(f'/cmdr/{pub}/alpha-one')
+        st, html, _ = self.ts.request('/cmdr/alpha-one')
         self.assertEqual(st, 404)
 
 
