@@ -200,6 +200,7 @@ class Engine:
         self._verify_end(r, None)
         r.enrolled, r.verified = True, True
         r.pub_id = j.get('pub_id') or r.pub_id
+        r.note(j)
         r.blocked, r.blocked_until = None, 0.0
         r.prefs_sent = None
         r.sent.clear()
