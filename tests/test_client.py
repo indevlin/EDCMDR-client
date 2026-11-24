@@ -81,6 +81,12 @@ class Svc(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == '/market':
+            if self.headers.get('Authorization') != 'Bearer fresh':
+                return self._reply(401, b'{}')
+            return self._reply(200, json.dumps({'id': 900, 'name': 'N2Z-N8M', 'orders': {'onfootmicroresources': {
+                'sales': {'1': {'name': 'chemicalsample', 'locName': 'Chemical Sample', 'price': 100, 'stock': 3}},
+                'purchases': [{'name': 'healthmonitor', 'locName': 'Health Monitor', 'price': 50, 'total': 9}]}}}).encode())
         body = {'/discard': ['Music', 'Friends'], '/interested': ['FSDJump', 'Scan', 'CarrierStatus']}
         self._reply(200, json.dumps(body.get(self.path, [])).encode())
 
@@ -94,6 +100,15 @@ class Svc(BaseHTTPRequestHandler):
         if self.headers.get('Content-Encoding') == 'gzip':
             Svc.got.append(('eddn' if self.path == '/eddn' else 'edastro', json.loads(gzip.decompress(raw))))
             return self._reply(200, b'{}')
+        if self.path == '/token':
+            form = {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode()).items()}
+            Svc.got.append(('token', form))
+            if form.get('refresh_token') != 'r1':
+                return self._reply(400, b'{"error":"invalid_grant"}')
+            return self._reply(200, json.dumps({'access_token': 'fresh', 'refresh_token': 'r2', 'expires_in': 7200}).encode())
+        if self.path == '/inara':
+            Svc.got.append(('inara', json.loads(raw)))
+            return self._reply(200, json.dumps({'header': {'eventStatus': 200}}).encode())
         form = {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode()).items()}
         Svc.got.append(('edsm', form))
         self._reply(200, json.dumps({'msgnum': 100, 'msg': 'OK'}).encode())
@@ -115,6 +130,8 @@ class TestIntegrations(unittest.TestCase):
         base = f'http://127.0.0.1:{cls.srv.server_address[1]}'
         it.EDSM_DISCARD_URL, it.EDASTRO_INTEREST_URL = base + '/discard', base + '/interested'
         it.EDSM.url, it.EDAstro.url, it.EDDN.url = base + '/edsm', base + '/astro', base + '/eddn'
+        it.Inara.url = base + '/inara'
+        it.Inara.gap = 0.05
         it.EDSM.gap = it.EDAstro.gap = it.EDDN.gap = 0.05
         it.Sender.retry_wait = 30
 
@@ -249,6 +266,73 @@ class TestIntegrations(unittest.TestCase):
         self.assertEqual(b.messages({'event': 'MarketSell', 'IllegalGoods': True, 'Type': 'x', 'SellPrice': 1}, None),
                          [], 'black market needs a station')
 
+    def test_inara(self):
+        self.settings.set_integration('F1', 'inara', {'enabled': True, 'api_key': 'ik'})
+        h = self.hub()
+        h.observe('F1', {'event': 'Rank', 'Combat': 4, 'Trade': 13})
+        h.observe('F1', {'event': 'Progress', 'Combat': 43, 'Trade': 100})
+        h.live('F1', {'event': 'FSDJump', 'StarSystem': 'Ogmar', 'StarPos': [1, 2, 3], 'JumpDist': 12.345,
+                      'timestamp': '2026-11-23T10:00:00Z'})
+        kind, body = self.wait(1)[0]
+        self.assertEqual(kind, 'inara')
+        self.assertEqual(body['header']['appName'], 'EDCMDR-client')
+        self.assertEqual((body['header']['APIkey'], body['header']['commanderName']), ('ik', 'Tester'))
+        self.assertNotIn('commanderFrontierID', body['header'], 'the FID goes only with the application key')
+        names = [e['eventName'] for e in body['events']]
+        self.assertEqual(names, ['addCommanderTravelFSDJump', 'setCommanderRankPilot'])
+        self.assertEqual(body['events'][0]['eventData']['jumpDistance'], 12.35)
+        ranks = {r['rankName']: r for r in body['events'][1]['eventData']}
+        self.assertEqual((ranks['trade']['rankValue'], ranks['trade']['rankProgress']), (13, 1.0))
+
+    def test_inara_needs_a_key(self):
+        from edcmdr import inara
+        self.assertEqual(inara.INARA_APP_KEY, '', 'placeholder until Inara issues the application key')
+        self.settings.set_integration('F1', 'inara', {'enabled': True, 'api_key': ''})
+        self.hub().live('F1', {'event': 'FSDJump', 'StarSystem': 'Ogmar'})
+        time.sleep(0.3)
+        self.assertEqual(Svc.got, [])
+        self.assertTrue(inara.throttled(400, 'Too much requests, slow down, cowboy.'))
+
+    def capi_hub(self):
+        from edcmdr import capi
+        base = f'http://127.0.0.1:{self.srv.server_address[1]}'
+        h = self.hub()
+        h.capi_base, h.capi_root = base, self.dir / 'capi'
+        store = capi.Store('F1', h.capi_root)
+        store.keep({'access_token': 'old', 'refresh_token': 'r1', 'expires_in': 1}, base + '/token', 'cid', 'https://edcmdr.com/cb')
+        return h, store
+
+    def test_capi_store_is_private(self):
+        h, store = self.capi_hub()
+        self.assertEqual(oct(store.path.stat().st_mode & 0o777), '0o600')
+        self.assertEqual(store.load()['refresh_token'], 'r1')
+
+    def test_capi_carrier_materials(self):
+        self.settings.set_integration('F1', 'eddn', {'enabled': True})
+        self.settings.set_integration('F1', 'capi', {'enabled': True})
+        h, store = self.capi_hub()
+        h.live('F1', {'event': 'Docked', 'StationType': 'FleetCarrier', 'StationName': 'N2Z-N8M', 'MarketID': 900,
+                      'StarSystem': 'Sol', 'SystemAddress': 10477373803, 'timestamp': 't'})
+        got = self.wait(3)
+        self.assertEqual([g for g in got if g[0] == 'token'][0], ('token', {'grant_type': 'refresh_token', 'client_id': 'cid',
+                                            'redirect_uri': 'https://edcmdr.com/cb', 'refresh_token': 'r1'}))
+        self.assertEqual(store.load()['refresh_token'], 'r2', 'the refreshed sign-in is kept')
+        env = [g[1] for g in got if g[0] == 'eddn' and 'fcmaterials' in g[1]['$schemaRef']][0]
+        self.assertEqual(env['header']['gameversion'], 'CAPI-Live-market')
+        items = env['message']['Items']
+        self.assertNotIn('locName', items['purchases'][0])
+        self.assertNotIn('locName', items['sales']['1'])
+
+    def test_capi_refused_refresh_forgets(self):
+        from edcmdr import capi
+        h, store = self.capi_hub()
+        t = store.load()
+        t['refresh_token'] = 'bad'
+        store.save(t)
+        with self.assertRaises(capi.SignInNeeded):
+            capi.Client(store, h.capi_base).token()
+        self.assertFalse(store.path.exists(), 'a refused sign-in is deleted')
+
     def test_retry_then_spill(self):
         self.settings.set_integration('F1', 'edastro', {'enabled': True})
         Svc.fail = 1
@@ -299,10 +383,41 @@ class TestState(unittest.TestCase):
         self.assertEqual(ships[5]['type_name'], 'Cobra Mk V')
         self.assertFalse(cm['F1000001'].presence()['in_game'], 'Shutdown ends presence')
 
+    def test_ships_on_a_carrier(self):
+        c = Commander('F1')
+        for ev in (
+            {'event': 'CarrierStats', 'CarrierID': 900, 'CarrierType': 'FleetCarrier', 'Name': 'VECTURA', 'Callsign': 'N2Z-N8M'},
+            {'event': 'Docked', 'StationName': 'N2Z-N8M', 'StationType': 'FleetCarrier', 'MarketID': 900, 'StarSystem': 'Sol'},
+            {'event': 'Loadout', 'Ship': 'mandalay', 'ShipID': 0, 'ModulesValue': 6641893, 'Modules': []},
+            {'event': 'ShipyardSwap', 'ShipType': 'cobramkv', 'ShipID': 19, 'StoreOldShip': 'mandalay', 'StoreShipID': 0},
+            {'event': 'StoredShips', 'StationName': 'N2Z-N8M', 'MarketID': 900, 'StarSystem': 'Sol',
+             'ShipsHere': [{'ShipID': 0, 'ShipType': 'mandalay', 'Value': 5977703}], 'ShipsRemote': []},
+            {'event': 'Undocked'},
+            {'event': 'CarrierLocation', 'CarrierType': 'FleetCarrier', 'CarrierID': 900, 'StarSystem': 'Kitchang Mu'},
+            {'event': 'FSDJump', 'StarSystem': 'Ogmar'},
+        ):
+            c.handle(ev)
+        cats = c.categories()
+        self.assertEqual(cats['fleet']['ships'][0]['value'], 6641893, 'the Loadout value, not the stored-ship figure')
+        self.assertEqual(cats['location']['ships'], [{'id': 0, 'system': 'Kitchang Mu', 'station': 'VECTURA (N2Z-N8M)'}],
+                         'a ship aboard a carrier moves with it; the current ship is not listed')
+        self.assertNotIn('market', cats['fleet']['ships'][0])
+
     def test_presence_stale(self):
         _, cm = load([FIX])
         c = cm['F1000002']
         self.assertFalse(c.presence()['in_game'], 'old LoadGame without Shutdown is stale')
+        self.assertTrue(c.presence(time.time() - 60)['in_game'], 'a recent write by the game keeps it live')
+        self.assertFalse(cm['F1000001'].presence(time.time())['in_game'], 'but not after Shutdown')
+
+    def test_activity(self):
+        d = Path(tempfile.mkdtemp(dir=TMP))
+        (d / 'Journal.2026-11-21T100000.01.log').write_text(
+            '{"timestamp":"2026-11-21T10:00:00Z","event":"Fileheader","part":1,"gameversion":"4.2.1.0"}\n'
+            '{"timestamp":"2026-11-21T10:00:01Z","event":"Commander","FID":"F1000009","Name":"Idle"}\n')
+        (d / 'Status.json').write_text('{}')
+        w, cm = load([d])
+        self.assertGreater(w.activity['F1000009'], time.time() - 5, 'the game writing its files counts')
 
 
 SERVER = Ed25519PrivateKey.generate()
@@ -465,6 +580,7 @@ class TestEndToEnd(unittest.TestCase):
         p = s.prefs('F1000002')
         p['share']['ranks'] = True
         s.set_prefs('F1000002', p)
+        s.set_integration('F1000002', 'capi', {'enabled': True})
         os.environ['EDCMDR_HOME'] = str(TMP / 'home-verify')
         e = Engine(s, Client(self.base))
         e.tick()
@@ -489,6 +605,10 @@ class TestEndToEnd(unittest.TestCase):
         c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
         self.assertIsNone(c['verify'])
         self.assertIsNone(e.rt['F1000002'].vtoken, 'the token is dropped')
+        from edcmdr import capi
+        kept = capi.Store('F1000002').load()
+        self.assertTrue(kept.get('access_token'), 'with CAPI on, the sign-in stays on this computer')
+        self.assertTrue(kept['token_url'].endswith('/token'))
         self.assertTrue(c['verified'] and c['enrolled'], c)
         self.assertIsNone(c['blocked'])
         with self.assertRaises(ProtoError) as err:

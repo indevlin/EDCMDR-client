@@ -108,6 +108,7 @@ jobs:
       - name: Build
         env:
           EDCMDR_BUILD_KEY: ${{ secrets.EDCMDR_BUILD_KEY }}
+          INARA_APP_KEY: ${{ secrets.INARA_APP_KEY }}
           EDCMDR_VERSION: ${{ env.VERSION }}
         run: python scripts/build.py --release
 

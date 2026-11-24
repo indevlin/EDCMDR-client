@@ -6,6 +6,15 @@ Last updated: 20261123
 
 ## Unreleased
 
+### Added: Inara and Frontier CAPI
+- Inara: your commander, ranks, credits, ships and fittings, travel, missions, engineers and materials, under your Inara account with your Inara API key. The client identifies to Inara as EDCMDR-client.
+- Frontier CAPI: switch it on and verify with Frontier once, and the sign-in stays on your computer (never on edcmdr.com). With EDDN on, your fleet carrier's bartender orders are shared from CAPI when you dock there.
+
+### Fixed
+- Online status: a commander playing without travelling (docked, trading, in combat) no longer shows as offline after 15 minutes; the game writing its files counts as being in game.
+- Ship values are the game's own hull and module values; stored ships aboard a fleet carrier are shown at the carrier and move with it; the current ship is no longer listed with a stale location.
+- Time pledged to your power is sent with Powerplay.
+
 ### Changed: simpler download names
 - `EDCMDR-<version>-linux`, `EDCMDR-<version>-windows.exe` and `EDCMDR-<version>-macos.zip`.
 

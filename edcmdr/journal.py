@@ -62,6 +62,7 @@ class Watcher:
         self.tail: dict[Path, Path] = {}
         self.imported = False
         self.current: Path | None = None
+        self.activity: dict[str, float] = {}
 
     def commanders(self) -> dict[str, str]:
         out = {}
@@ -126,4 +127,13 @@ class Watcher:
             o = self._owner(newest)
             if o:
                 self._read(newest, o[0])
+                self._active(o[0], newest, d / 'Status.json')
         self.imported = True
+
+    def _active(self, fid: str, *paths: Path) -> None:
+        """Newest write time of the game's files for the commander playing in that folder."""
+        for p in paths:
+            try:
+                self.activity[fid] = max(self.activity.get(fid, 0.0), p.stat().st_mtime)
+            except OSError:
+                pass

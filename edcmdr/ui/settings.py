@@ -385,6 +385,27 @@ class SettingsWindow(QWidget):
         f.addRow('API key', self.edsm_key)
         f.addRow(note('EDSM receives the events it accepts, with your commander name from the journal.'))
         lay.addWidget(edsm)
+        ina = QGroupBox('Inara')
+        i = QFormLayout(ina)
+        self.inara_on = QCheckBox('Send my commander to Inara, under my Inara account')
+        self.inara_key = QLineEdit()
+        self.inara_key.setEchoMode(QLineEdit.Password)
+        self.inara_key.setPlaceholderText('From inara.cz → Settings → Inara API key')
+        i.addRow(self.inara_on)
+        i.addRow('API key', self.inara_key)
+        i.addRow(note('Ranks, credits, ships and their fittings, travel, missions, engineers and materials.'))
+        lay.addWidget(ina)
+        cap = QGroupBox('Frontier CAPI')
+        k = QFormLayout(cap)
+        self.capi_on = QCheckBox('Keep my Frontier sign-in on this computer for CAPI')
+        self.capi_state = QLabel('')
+        self.capi_state.setWordWrap(True)
+        k.addRow(self.capi_on)
+        k.addRow(self.capi_state)
+        k.addRow(note('With EDDN on, your fleet carrier bartender orders are shared from CAPI when you dock there. '
+                      'The sign-in is kept only here, never on edcmdr.com. After switching this on, press Verify '
+                      'with Frontier once to sign in.'))
+        lay.addWidget(cap)
         astro = QGroupBox('EDAstro')
         g = QFormLayout(astro)
         self.astro_on = QCheckBox('Send exploration and travel events to EDAstro (no account)')
@@ -392,9 +413,10 @@ class SettingsWindow(QWidget):
         g.addRow(self.astro_on)
         g.addRow(self.astro_carrier)
         lay.addWidget(astro)
-        for x in (self.eddn_on, self.edsm_on, self.astro_on, self.astro_carrier):
+        for x in (self.eddn_on, self.edsm_on, self.inara_on, self.capi_on, self.astro_on, self.astro_carrier):
             x.toggled.connect(self._save_integrations)
         self.edsm_key.editingFinished.connect(self._save_integrations)
+        self.inara_key.editingFinished.connect(self._save_integrations)
         self.int_status = QLabel('')
         self.int_status.setWordWrap(True)
         lay.addWidget(self.int_status)
@@ -409,12 +431,26 @@ class SettingsWindow(QWidget):
         self._int_loading = True
         self.eddn_on.setChecked(Hub.config(self.engine.settings, fid, 'eddn')['enabled'])
         e = Hub.config(self.engine.settings, fid, 'edsm')
+        self.capi_on.setChecked(Hub.config(self.engine.settings, fid, 'capi')['enabled'])
+        self._capi_state(fid)
+        n = Hub.config(self.engine.settings, fid, 'inara')
+        self.inara_on.setChecked(n['enabled'])
+        self.inara_key.setText(n['api_key'])
         a = Hub.config(self.engine.settings, fid, 'edastro')
         self.edsm_on.setChecked(e['enabled'])
         self.edsm_key.setText(e['api_key'])
         self.astro_on.setChecked(a['enabled'])
         self.astro_carrier.setChecked(a['carrier'])
         self._int_loading = False
+
+    def _capi_state(self, fid):
+        from ..capi import Store
+        if not self.capi_on.isChecked():
+            self.capi_state.setText('')
+        elif Store(fid).signed_in():
+            self.capi_state.setText('Signed in with Frontier on this computer.')
+        else:
+            self.capi_state.setText('Not signed in yet: press Verify with Frontier on the Commanders tab.')
 
     def _save_integrations(self):
         fid = self.iwho.currentData()
@@ -423,6 +459,13 @@ class SettingsWindow(QWidget):
         self.engine.settings.set_integration(fid, 'eddn', {'enabled': self.eddn_on.isChecked()})
         self.engine.settings.set_integration(fid, 'edsm', {'enabled': self.edsm_on.isChecked(),
                                                            'api_key': self.edsm_key.text().strip()})
+        self.engine.settings.set_integration(fid, 'capi', {'enabled': self.capi_on.isChecked()})
+        if not self.capi_on.isChecked():
+            from ..capi import Store
+            Store(fid).forget()
+        self._capi_state(fid)
+        self.engine.settings.set_integration(fid, 'inara', {'enabled': self.inara_on.isChecked(),
+                                                            'api_key': self.inara_key.text().strip()})
         self.engine.settings.set_integration(fid, 'edastro', {'enabled': self.astro_on.isChecked(),
                                                               'carrier': self.astro_carrier.isChecked()})
 
@@ -495,7 +538,7 @@ class SettingsWindow(QWidget):
             self._load_integrations()
         if hasattr(self, 'int_status') and self.engine.hub is not None:
             st = self.engine.hub.status()
-            label = {'eddn': 'EDDN', 'edsm': 'EDSM', 'edastro': 'EDAstro'}
+            label = {'eddn': 'EDDN', 'edsm': 'EDSM', 'edastro': 'EDAstro', 'inara': 'Inara'}
             self.int_status.setText('  ·  '.join(f'{label[k]}: {v}' for k, v in sorted(st.items())))
         has = bool(cm)
         for x in (self.open_btn, self.forget_btn, self.verify_btn, self.portrait_btn):

@@ -32,7 +32,12 @@ Optional, per commander, off by default (Settings → Integrations):
 - **EDAstro**: exploration and travel events, no account; fleet carrier events only if you tick them.
 
 Only events from play while the client runs are sent, straight from your computer to the service.
-Inara and Frontier CAPI follow.
+- **Inara**: your commander, under your Inara account with your Inara API key.
+- **Frontier CAPI**: keeps your Frontier sign-in on this computer after Verify with Frontier; with EDDN on,
+  shares your fleet carrier's bartender orders when you dock there.
+
+The application name sent to Inara is `EDCMDR-client`. When Inara issues the application key, add it to
+this repository as the `INARA_APP_KEY` secret; release builds carry it from then on.
 
 ## Run from source
 
@@ -98,6 +103,8 @@ EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # p
     edcmdr/uplink.py     the engine: sharing, debounce, retries
     edcmdr/integrations.py  optional EDDN, EDSM and EDAstro uploads
     edcmdr/eddn.py       EDDN messages from journal events
+    edcmdr/inara.py      Inara events from journal events
+    edcmdr/capi.py       Frontier CAPI, with the sign-in kept on this computer
     edcmdr/ui/           tray and settings window
     protocol/v1/         spec.json, vendored from the EDCMDR server repo (protocol.lock)
     scripts/build.py     one-file build with the build key injected

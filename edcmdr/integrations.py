@@ -1,4 +1,4 @@
-"""Optional uploads to community services, straight from this computer: EDDN, EDSM and EDAstro.
+"""Optional uploads to community services, straight from this computer: EDDN, EDSM, EDAstro and Inara.
 
 Each is off until switched on for a commander in the Integrations tab. Only events read after the
 history import are sent (what you play while the client runs); nothing from the import is. Events
@@ -16,7 +16,7 @@ import urllib.request
 from collections import deque
 from pathlib import Path
 
-from . import NAME, VERSION, eddn, paths
+from . import NAME, VERSION, capi, eddn, inara, paths
 
 log = logging.getLogger('edcmdr')
 
@@ -44,6 +44,8 @@ SERVICES = {
     'eddn': {'label': 'EDDN', 'keys': {'enabled': False}},
     'edsm': {'label': 'EDSM', 'keys': {'enabled': False, 'api_key': ''}},
     'edastro': {'label': 'EDAstro', 'keys': {'enabled': False, 'carrier': False}},
+    'inara': {'label': 'Inara', 'keys': {'enabled': False, 'api_key': ''}},
+    'capi': {'label': 'Frontier CAPI', 'keys': {'enabled': False}},
 }
 
 
@@ -283,6 +285,34 @@ class EDDN(Sender):
                       {'Content-Type': 'application/json', 'Content-Encoding': 'gzip'})
 
 
+class Inara(Sender):
+    name = 'inara'
+    batch_max = 200
+    gap = 30.0
+    url = inara.URL
+    hold = 3600.0
+
+    def send(self, group: list, batch: list[dict]) -> None:
+        cmdr, key, fid = group
+        header = {'appName': NAME, 'appVersion': VERSION, 'isBeingDeveloped': False,
+                  'APIkey': key or inara.INARA_APP_KEY, 'commanderName': cmdr}
+        if not key:
+            header['commanderFrontierID'] = fid
+        body = self.post(self.url, json.dumps({'header': header, 'events': batch}, separators=(',', ':')).encode(),
+                         {'Content-Type': 'application/json'})
+        try:
+            h = json.loads(body).get('header', {})
+        except (ValueError, AttributeError) as e:
+            raise Retry('unreadable reply') from e
+        status, text = h.get('eventStatus', 200), h.get('eventStatusText', '')
+        if inara.throttled(status, text):
+            self.retry_wait = self.hold
+            raise Retry(f'Inara asks to wait an hour: {text}')
+        self.retry_wait = Sender.retry_wait
+        if status not in (200, 204):
+            raise RuntimeError(f'{status} {text}'.strip())
+
+
 class Hub:
     """Routes live journal events to the services each commander has switched on."""
 
@@ -293,6 +323,11 @@ class Hub:
         self.names: dict[str, str] = {}
         self.senders: dict[str, Sender] = {}
         self.builders: dict[str, eddn.Builder] = {}
+        self.inara: dict[str, inara.Builder] = {}
+        self.capi: dict[str, capi.Client] = {}
+        self.capi_seen: dict[str, str] = {}
+        self.capi_base = capi.BASE
+        self.capi_root: Path | None = None
         self.lock = threading.Lock()
 
     @staticmethod
@@ -307,13 +342,14 @@ class Hub:
     def _sender(self, service: str) -> Sender:
         with self.lock:
             if service not in self.senders:
-                self.senders[service] = {'eddn': EDDN, 'edsm': EDSM, 'edastro': EDAstro}[service](self.spill_dir)
+                self.senders[service] = {'eddn': EDDN, 'edsm': EDSM, 'edastro': EDAstro, 'inara': Inara}[service](self.spill_dir)
             return self.senders[service]
 
     def observe(self, fid: str, ev: dict) -> None:
         """An event from the history import: keeps each commander's position and game version current."""
         self._track(fid, ev)
         self.builders.setdefault(fid, eddn.Builder()).track(ev)
+        self.inara.setdefault(fid, inara.Builder()).track(ev)
 
     def _track(self, fid: str, ev: dict) -> Tracker:
         t = self.trackers.setdefault(fid, Tracker())
@@ -328,10 +364,60 @@ class Hub:
         """An event read after the history import: send it to each service switched on for this commander."""
         t = self._track(fid, ev)
         b = self.builders.setdefault(fid, eddn.Builder())
+        ib = self.inara.setdefault(fid, inara.Builder())
         try:
             self._send(fid, ev, t, b, journal_dir)
+            self._inara(fid, ev, t, ib)
+            self._capi(fid, ev, t)
         finally:
             b.track(ev)
+            ib.track(ev)
+
+    def _capi(self, fid: str, ev: dict, t: Tracker) -> None:
+        """Docked at a fleet carrier: its bartender's orders from CAPI /market, to EDDN."""
+        if ev.get('event') != 'Docked' or ev.get('StationType') != 'FleetCarrier' or beta(t.gameversion):
+            return
+        if not (self.config(self.settings, fid, 'capi')['enabled'] and self.config(self.settings, fid, 'eddn')['enabled']
+                and self.names.get(fid)):
+            return
+        c = self.capi.get(fid)
+        if c is None:
+            c = self.capi[fid] = capi.Client(capi.Store(fid, self.capi_root), self.capi_base)
+        if not c.store.signed_in():
+            return
+        mid, name, ts = ev.get('MarketID'), self.names[fid], ev.get('timestamp', '')
+        threading.Thread(target=self._fcmaterials, args=(fid, c, mid, name, ts), daemon=True,
+                         name='edcmdr-capi').start()
+
+    def _fcmaterials(self, fid: str, c: 'capi.Client', mid, name: str, ts: str) -> None:
+        try:
+            msg = capi.fcmaterials(c.get('market'), mid, ts)
+        except (capi.SignInNeeded, OSError, ValueError) as e:
+            log.info('CAPI market for %s: %s', fid, e)
+            return
+        if msg is None:
+            return
+        h = eddn.digest(msg['Items'])
+        if self.capi_seen.get(fid) == f'{mid}:{h}':
+            return
+        self.capi_seen[fid] = f'{mid}:{h}'
+        b = self.builders.get(fid) or eddn.Builder()
+        header = {'uploaderID': name, 'softwareName': NAME, 'softwareVersion': VERSION,
+                  'gameversion': 'CAPI-Live-market', 'gamebuild': 'CAPI-Live-market'}
+        self._sender('eddn').push(('',), {'$schemaRef': eddn.schema('fcmaterials_capi', 1), 'header': header,
+                                          'message': b._flags(msg)})
+
+    def _inara(self, fid: str, ev: dict, t: Tracker, ib: inara.Builder) -> None:
+        c = self.config(self.settings, fid, 'inara')
+        if not c['enabled'] or beta(t.gameversion) or not self.names.get(fid):
+            return
+        key = c['api_key']
+        evs = ib.events({k: v for k, v in ev.items() if not k.startswith('_')})
+        if evs and (key or inara.INARA_APP_KEY):
+            s = self._sender('inara')
+            for name, data in evs:
+                s.push((self.names[fid], key, fid), {'eventName': name, 'eventTimestamp': ev.get('timestamp', ''),
+                                                     'eventData': data})
 
     def _send(self, fid: str, ev: dict, t: Tracker, b: eddn.Builder, journal_dir: Path | None) -> None:
         if beta(t.gameversion):
