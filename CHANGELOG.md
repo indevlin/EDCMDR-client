@@ -4,7 +4,7 @@ Last updated: 20261123
 
 ---
 
-## Released in 20261123
+## Unreleased
 
 ### Added: Inara and Frontier CAPI
 - Inara: your commander, ranks, credits, ships and fittings, travel, missions, engineers and materials, under your Inara account with your Inara API key. The client identifies to Inara as EDCMDR-client.
@@ -13,6 +13,7 @@ Last updated: 20261123
 ### Fixed
 - In game: shown while the game is running and you are in a session, not at the main menu, however quietly you play; the game is found the way EDLD finds it. The client repeats it every 2 minutes, and the site shows you offline a few minutes after it stops.
 - Journal continuation files (part 2 and up of a long session) are read as the commander's, like the file before them.
+- The Squadron tab names the squadron each commander leads and saves only to that squadron; it shows as soon as verification finishes, and goes away when the journal shows the commander no longer leads it.
 - The Sharing tab no longer shows unused columns for other services; those live on the Integrations tab.
 - Ship values are the game's own hull and module values; stored ships aboard a fleet carrier are shown at the carrier and move with it; the current ship is no longer listed with a stale location.
 - Time pledged to your power is sent with Powerplay.
@@ -25,6 +26,8 @@ Last updated: 20261123
 - Off by default. Only what you play while the client runs is sent, never the imported history; Pause stops it.
 - Uploads go from your computer straight to each service. A batch that fails is kept and retried, including after a restart.
 - Not active when EDLD hosts the client: EDLD's own uploaders handle these there.
+
+## Released in 20261123
 
 ### Added: the EDCMDR client
 
