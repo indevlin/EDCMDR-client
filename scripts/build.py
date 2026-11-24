@@ -12,6 +12,7 @@ import argparse
 import os
 import time
 import re
+import shutil
 import platform
 import subprocess
 import sys
@@ -76,6 +77,9 @@ def main() -> int:
     for m in QT_EXCLUDES:
         cmd += ['--exclude-module', f'PySide6.{m}']
     cmd.append('edcmdr_client.py')
+    for old in (ROOT / 'dist').glob('EDCMDR-*'):
+        # dist/ holds this build only: earlier builds, under any name, go first.
+        shutil.rmtree(old) if old.is_dir() else old.unlink()
     try:
         INFO.write_text(f"VERSION = '{version}'\n")
         print(f'building version {version}')
