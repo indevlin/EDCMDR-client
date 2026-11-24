@@ -1,6 +1,5 @@
 """Per-commander state built from journal events, emitted as protocol categories."""
 import json
-import time
 from datetime import datetime
 
 from . import paths
@@ -19,7 +18,7 @@ EVENTS = frozenset({
     'PowerplayLeave', 'PowerplayDefect', 'PowerplayRank', 'PowerplayMerits', 'EngineerProgress',
     'Location', 'FSDJump', 'CarrierJump', 'Docked', 'Undocked', 'SupercruiseEntry', 'ApproachBody', 'LeaveBody',
     'StoredShips', 'Loadout', 'ShipyardSwap', 'ShipyardNew', 'ShipyardSell', 'ShipyardTransfer',
-    'SetUserShipName', 'SellShipOnRebuy', 'ShipyardBuy', 'CarrierStats', 'CarrierLocation',
+    'SetUserShipName', 'SellShipOnRebuy', 'ShipyardBuy', 'CarrierStats', 'CarrierLocation', 'Music',
 })
 
 
@@ -81,6 +80,10 @@ class Commander:
 
     def _e_Shutdown(self, ev):
         self.in_game = False
+
+    def _e_Music(self, ev):
+        if ev.get('MusicTrack') == 'MainMenu':
+            self.in_game = False
 
     def _e_Rank(self, ev):
         self.ranks['rank'].update({k: ev[k] for k in RANK_KEYS if isinstance(ev.get(k), int)})
@@ -326,9 +329,9 @@ class Commander:
         m = self.markets.get(s['market']) if s['market'] is not None else None
         return {'id': s['id'], 'system': (m or {}).get('system') or s['system'], 'station': (m or {}).get('name')}
 
-    def presence(self, activity: float = 0.0, stale_after: int = 900) -> dict:
-        """In game: a session was loaded and not shut down, and the game wrote a file recently."""
-        live = self.in_game and time.time() - max(self.last_event, activity) < stale_after
+    def presence(self, running: bool) -> dict:
+        """In game: the game is running and a session is loaded (LoadGame, with no Shutdown or main menu since)."""
+        live = self.in_game and running
         cur = self.ships.get(self.current)
         return {'in_game': live, 'mode': self.mode if live else 'Unknown',
                 'ship': cur['type_name'] if live and cur else None}

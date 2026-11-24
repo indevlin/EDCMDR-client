@@ -381,7 +381,7 @@ class TestState(unittest.TestCase):
         self.assertEqual(at[3]['station'], 'Test Port')
         self.assertEqual(at[5]['system'], 'Sol')
         self.assertEqual(ships[5]['type_name'], 'Cobra Mk V')
-        self.assertFalse(cm['F1000001'].presence()['in_game'], 'Shutdown ends presence')
+        self.assertFalse(cm['F1000001'].presence(True)['in_game'], 'Shutdown ends presence')
 
     def test_ships_on_a_carrier(self):
         c = Commander('F1')
@@ -403,21 +403,26 @@ class TestState(unittest.TestCase):
                          'a ship aboard a carrier moves with it; the current ship is not listed')
         self.assertNotIn('market', cats['fleet']['ships'][0])
 
-    def test_presence_stale(self):
+    def test_presence(self):
         _, cm = load([FIX])
         c = cm['F1000002']
-        self.assertFalse(c.presence()['in_game'], 'old LoadGame without Shutdown is stale')
-        self.assertTrue(c.presence(time.time() - 60)['in_game'], 'a recent write by the game keeps it live')
-        self.assertFalse(cm['F1000001'].presence(time.time())['in_game'], 'but not after Shutdown')
+        self.assertFalse(c.presence(False)['in_game'], 'a session with the game not running is not in game')
+        self.assertTrue(c.presence(True)['in_game'], 'loaded, and the game running: in game, however quiet')
+        c.handle({'event': 'Music', 'MusicTrack': 'MainMenu'})
+        self.assertFalse(c.presence(True)['in_game'], 'back at the main menu')
+        c.handle({'event': 'LoadGame', 'Commander': 'BRAVO TWO', 'GameMode': 'Open'})
+        self.assertEqual(c.presence(True)['mode'], 'Open')
 
-    def test_activity(self):
+    def test_game_running(self):
+        from edcmdr import game
         d = Path(tempfile.mkdtemp(dir=TMP))
-        (d / 'Journal.2026-11-21T100000.01.log').write_text(
-            '{"timestamp":"2026-11-21T10:00:00Z","event":"Fileheader","part":1,"gameversion":"4.2.1.0"}\n'
-            '{"timestamp":"2026-11-21T10:00:01Z","event":"Commander","FID":"F1000009","Name":"Idle"}\n')
         (d / 'Status.json').write_text('{}')
-        w, cm = load([d])
-        self.assertGreater(w.activity['F1000009'], time.time() - 5, 'the game writing its files counts')
+        self.assertTrue(game.running(d), 'a fresh Status.json means the game is running')
+        self.assertTrue(game._is_game(['/home/x/.steam/steamapps/common/Elite Dangerous/Products/elite-dangerous-odyssey-64/EliteDangerous64.exe']))
+        self.assertTrue(game._is_game(['Z:\\Games\\ED\\EliteDangerous64.exe', '/autorun']))
+        self.assertFalse(game._is_game(['/usr/bin/python3', 'edld.py']))
+        w, _ = load([FIX])
+        self.assertEqual(set(w.where.values()), {FIX}, 'each commander is placed in its journal folder')
 
 
 SERVER = Ed25519PrivateKey.generate()

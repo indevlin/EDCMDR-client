@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # scripts/sync_wiki.sh
 #
-# Copies EDLD docs from the main repo into the wiki repo.
+# Copies the player-facing docs into the wiki repo. The README, which is for
+# people working on the client, is not copied.
 #
 # Pages:
-#   README.md               → Home.md
-#   INSTALL.md              → Installation.md
-#   sheets/README.md        → Survey-Sheet.md
-#   CHANGELOG.md            → Release-Notes.md
-#   docs/SOME_DOC.md        → Some-Doc.md
-#   docs/guides/SOME_GUIDE  → Some-Guide.md
+#   docs/wiki/Home.md            → Home.md
+#   docs/wiki/NN_some_page.md    → Some-Page.md (NN orders the sidebar)
+#   CHANGELOG.md                 → Release-Notes.md
 #
 # Links resolve against the source file's directory. A link to another synced
 # doc becomes its wiki page; an image becomes a raw URL; anything else in the
@@ -48,27 +46,25 @@ tree = f"https://github.com/{slug}/tree/main/"
 raw = f"https://raw.githubusercontent.com/{slug}/main/"
 
 FIXED = {
-    "README.md": "Home",
+    "docs/wiki/Home.md": "Home",
     "CHANGELOG.md": "Release-Notes",
 }
+WORDS = {"with": "With", "edcmdr": "EDCMDR"}
 IMAGE = re.compile(r"\.(png|jpe?g|gif|svg|webp|ico)$", re.I)
 
 
 def wiki_name(rel):
     if rel in FIXED:
         return FIXED[rel]
-    base = Path(rel).stem
-    return "-".join(w[:1].upper() + w[1:].lower()
+    base = re.sub(r"^\d+[_-]", "", Path(rel).stem)
+    return "-".join(WORDS.get(w.lower(), w[:1].upper() + w[1:].lower())
                     for w in re.split(r"[_-]+", base) if w)
 
 
 pages = {rel: wiki_name(rel) for rel in FIXED if (repo / rel).is_file()}
-guides = sorted(p.name for p in (repo / "docs/guides").glob("*.md"))
-refs = sorted(p.name for p in (repo / "docs").glob("*.md"))
+guides = sorted(p.name for p in (repo / "docs/wiki").glob("*.md") if p.name != "Home.md")
 for n in guides:
-    pages[f"docs/guides/{n}"] = wiki_name(n)
-for n in refs:
-    pages[f"docs/{n}"] = wiki_name(n)
+    pages[f"docs/wiki/{n}"] = wiki_name(n)
 
 names = list(pages.values())
 dupes = {n for n in names if names.count(n) > 1}
@@ -135,11 +131,9 @@ def entry(rel):
     return f"- [[{name.replace('-', ' ')}|{name}]]"
 
 
-side = ["## EDCMDR client Wiki", "", "**Getting Started**", entry("README.md")]
+side = ["## EDCMDR client", "", entry("docs/wiki/Home.md")]
 if guides:
-    side += ["", "**Guides**"] + [entry(f"docs/guides/{n}") for n in guides]
-if refs:
-    side += ["", "**Reference**"] + [entry(f"docs/{n}") for n in refs]
+    side += [""] + [entry(f"docs/wiki/{n}") for n in guides]
 if "CHANGELOG.md" in pages:
     side += ["", "**Releases**", entry("CHANGELOG.md")]
 (wiki / "_Sidebar.md").write_text("\n".join(side) + "\n", encoding="utf-8")

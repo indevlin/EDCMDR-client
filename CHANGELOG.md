@@ -11,7 +11,8 @@ Last updated: 20261123
 - Frontier CAPI: switch it on and verify with Frontier once, and the sign-in stays on your computer (never on edcmdr.com). With EDDN on, your fleet carrier's bartender orders are shared from CAPI when you dock there.
 
 ### Fixed
-- Online status: a commander playing without travelling (docked, trading, in combat) no longer shows as offline after 15 minutes; the game writing its files counts as being in game.
+- In game: shown while the game is running and you are in a session, not at the main menu, however quietly you play; the game is found the way EDLD finds it. The client repeats it every 2 minutes, and the site shows you offline a few minutes after it stops.
+- The Sharing tab no longer shows unused columns for other services; those live on the Integrations tab.
 - Ship values are the game's own hull and module values; stored ships aboard a fleet carrier are shown at the carrier and move with it; the current ship is no longer listed with a stale location.
 - Time pledged to your power is sent with Powerplay.
 

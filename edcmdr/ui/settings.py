@@ -23,7 +23,6 @@ LATER: dict[str, str] = {}
 UNDELAYED = set(SPEC['undelayed'])
 POWERS = SPEC['powers']
 RECRUITING = {'': '—', 'open': 'Open', 'invite': 'By invitation', 'closed': 'Closed'}
-DESTS = ['EDDN', 'Inara', 'EDSM', 'EDAstro']
 
 
 def note(text: str) -> QLabel:
@@ -284,7 +283,7 @@ class SettingsWindow(QWidget):
         lay.addWidget(note('Nothing is published until you switch it on. Switching a section off deletes it from '
                            'EDCMDR. Delays are enforced by EDCMDR, not just this computer.'))
         grid = QGridLayout()
-        for col, h in enumerate(['', 'EDCMDR', 'Delay', *DESTS]):
+        for col, h in enumerate(['', 'EDCMDR', 'Delay']):
             lb = QLabel(h)
             lb.setObjectName('head')
             grid.addWidget(lb, 0, col, alignment=Qt.AlignCenter if col else Qt.AlignLeft)
@@ -309,11 +308,6 @@ class SettingsWindow(QWidget):
             self.share[cat], self.delay[cat] = cb, dl
             grid.addWidget(cb, r, 1, alignment=Qt.AlignCenter)
             grid.addWidget(dl, r, 2)
-            for i in range(len(DESTS)):
-                x = QCheckBox()
-                x.setEnabled(False)
-                x.setToolTip('Arrives with integrations (M4).')
-                grid.addWidget(x, r, 3 + i, alignment=Qt.AlignCenter)
         lay.addLayout(grid)
         self.wealth = QCheckBox('Include current wealth with lifetime statistics')
         self.names = QCheckBox('Let my earlier commander names find this page')

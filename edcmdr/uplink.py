@@ -13,7 +13,7 @@ import time
 from typing import Callable
 
 from . import NAME, VERSION, journal, keys
-from . import capi
+from . import capi, game
 from .integrations import Hub
 from .single import PublisherLock
 from .config import SPEC, Settings
@@ -24,7 +24,7 @@ log = logging.getLogger('edcmdr')
 
 TICK = 1.0
 DEBOUNCE = 60
-PRESENCE_EVERY = 300
+PRESENCE_EVERY = 120
 HELLO_EVERY = 6 * 3600
 VERIFY_POLL = 4
 TRANSIENT = ('net', 'reply', 'rate', 'maintenance', 'clock', 'server', 'replay')
@@ -285,7 +285,7 @@ class Engine:
                            'leader_of': r.leader_of,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'verify': r.verify_note[0] if r.verify_note and r.verify_note[1] > time.time() else None,
-                           'in_game': c.presence(self.watcher.activity.get(c.fid, 0.0))['in_game']})
+                           'in_game': c.presence(self._running(c.fid))['in_game']})
             return {'state': self.state, 'status': self.status, 'official': self.client.official,
                     'server': self.client.base, 'commanders': cm, 'update': self.update_available()}
 
@@ -455,10 +455,13 @@ class Engine:
                 r.sent[cat] = cats[cat][1]
         r.last_push = now
 
+    def _running(self, fid: str) -> bool:
+        return game.running(self.watcher.where.get(fid))
+
     def _presence(self, c: Commander, r: Runtime, key, prefs: dict, now: float) -> None:
         if not prefs['presence']:
             return
-        p = c.presence(self.watcher.activity.get(c.fid, 0.0))
+        p = c.presence(self._running(c.fid))
         d = digest(p)
         last_d, last_t = r.presence_sent
         if d == last_d and (not p['in_game'] or now - last_t < PRESENCE_EVERY) and not self.force:
