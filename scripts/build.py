@@ -12,6 +12,7 @@ import argparse
 import os
 import time
 import re
+import shutil
 import platform
 import subprocess
 import sys
@@ -68,7 +69,9 @@ def main() -> int:
         sys.exit(f'{SECRET} is tracked by git; remove it from the index first')
 
     sep = ';' if os.name == 'nt' else ':'
-    cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--windowed',
+    # macOS gets an .app bundle, which is a folder: one-file mode makes no sense there.
+    mode = '--onedir' if platform.system() == 'Darwin' else '--onefile'
+    cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', mode, '--windowed',
            '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
            '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
@@ -76,6 +79,9 @@ def main() -> int:
     for m in QT_EXCLUDES:
         cmd += ['--exclude-module', f'PySide6.{m}']
     cmd.append('edcmdr_client.py')
+    for old in (ROOT / 'dist').glob('EDCMDR-*'):
+        # dist/ holds this build only: earlier builds, under any name, go first.
+        shutil.rmtree(old) if old.is_dir() else old.unlink()
     try:
         INFO.write_text(f"VERSION = '{version}'\n")
         print(f'building version {version}')

@@ -304,7 +304,8 @@ class TestIntegrations(unittest.TestCase):
 
     def test_capi_store_is_private(self):
         h, store = self.capi_hub()
-        self.assertEqual(oct(store.path.stat().st_mode & 0o777), '0o600')
+        if os.name != 'nt':  # Windows has no owner/group/other modes; the file sits in the user's profile
+            self.assertEqual(oct(store.path.stat().st_mode & 0o777), '0o600')
         self.assertEqual(store.load()['refresh_token'], 'r1')
 
     def test_capi_carrier_materials(self):
