@@ -107,8 +107,21 @@ class Watcher:
 
     def _owner(self, path: Path) -> tuple[str, str] | None:
         if self.owner.get(path) is None:
-            self.owner[path] = read_owner(path)
+            self.owner[path] = read_owner(path) or self._continues(path)
         return self.owner[path]
+
+    def _continues(self, path: Path) -> tuple[str, str] | None:
+        """A continuation file (Fileheader part 2 and up) has no Commander event: it belongs to the file before it."""
+        try:
+            with path.open('r', encoding='utf-8', errors='replace') as f:
+                head = json.loads(f.readline() or '{}')
+        except (OSError, ValueError):
+            return None
+        if head.get('event') != 'Fileheader' or not isinstance(head.get('part'), int) or head['part'] < 2:
+            return None
+        files = journal_files(path.parent)
+        i = files.index(path) if path in files else 0
+        return self._owner(files[i - 1]) if i > 0 else None
 
     def poll(self) -> None:
         for d in self.dirs:

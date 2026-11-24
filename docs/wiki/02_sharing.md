@@ -18,7 +18,8 @@ until then. Portraits appear at once.
 
 Your commander's name is always shown. Two extra choices:
 
-- **Include current wealth with lifetime statistics.** Off, your current wealth stays private.
+- **Include net worth with lifetime statistics.** The game's own figure: your credits plus the value of
+  your ships, modules and carriers. Off, it stays private.
 - **Let my earlier commander names find this page.** Off, an old name leads nowhere.
 
 Your choices are saved and sent as you make them.

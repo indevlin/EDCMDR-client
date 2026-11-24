@@ -403,6 +403,29 @@ class TestState(unittest.TestCase):
                          'a ship aboard a carrier moves with it; the current ship is not listed')
         self.assertNotIn('market', cats['fleet']['ships'][0])
 
+    def test_tails_new_journals(self):
+        """Journals that appear while running are picked up, continuation parts included."""
+        d = Path(tempfile.mkdtemp(dir=TMP))
+        got = []
+        w = journal.Watcher([d], lambda f, e: got.append((f, e['event'])), EVENTS)
+
+        def line(ev, extra=''):
+            return '{ "timestamp":"2026-11-23T10:00:00Z", "event":"%s"%s }\n' % (ev, extra)
+        (d / 'Journal.2026-11-22T100000.01.log').write_text(line('Fileheader', ', "part":1') + line('Commander', ', "FID":"F7", "Name":"A"'))
+        w.poll()
+        f2 = d / 'Journal.2026-11-23T100000.01.log'
+        f2.write_text(line('Fileheader', ', "part":1'))
+        w.poll()
+        with f2.open('a') as f:
+            f.write(line('Commander', ', "FID":"F7", "Name":"A"') + line('LoadGame', ', "FID":"F7", "Commander":"A"'))
+        w.poll()
+        with f2.open('a') as f:
+            f.write(line('Statistics'))
+        w.poll()
+        (d / 'Journal.2026-11-23T100000.02.log').write_text(line('Fileheader', ', "part":2') + line('Rank'))
+        w.poll()
+        self.assertEqual([e for _, e in got], ['Commander', 'Commander', 'LoadGame', 'Statistics', 'Rank'])
+
     def test_presence(self):
         _, cm = load([FIX])
         c = cm['F1000002']

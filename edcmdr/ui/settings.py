@@ -309,7 +309,7 @@ class SettingsWindow(QWidget):
             grid.addWidget(cb, r, 1, alignment=Qt.AlignCenter)
             grid.addWidget(dl, r, 2)
         lay.addLayout(grid)
-        self.wealth = QCheckBox('Include current wealth with lifetime statistics')
+        self.wealth = QCheckBox('Include net worth (credits plus ships, modules and carriers) with lifetime statistics')
         self.names = QCheckBox('Let my earlier commander names find this page')
         for x in (self.wealth, self.names):
             x.toggled.connect(self._save_prefs)

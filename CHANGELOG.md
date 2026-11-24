@@ -12,6 +12,7 @@ Last updated: 20261123
 
 ### Fixed
 - In game: shown while the game is running and you are in a session, not at the main menu, however quietly you play; the game is found the way EDLD finds it. The client repeats it every 2 minutes, and the site shows you offline a few minutes after it stops.
+- Journal continuation files (part 2 and up of a long session) are read as the commander's, like the file before them.
 - The Sharing tab no longer shows unused columns for other services; those live on the Integrations tab.
 - Ship values are the game's own hull and module values; stored ships aboard a fleet carrier are shown at the carrier and move with it; the current ship is no longer listed with a stale location.
 - Time pledged to your power is sent with Powerplay.
