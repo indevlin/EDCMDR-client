@@ -4,7 +4,7 @@ Last updated: 20261123
 
 ---
 
-## Unreleased
+## Released in 20261123
 
 ### Added: Inara and Frontier CAPI
 - Inara: your commander, ranks, credits, ships and fittings, travel, missions, engineers and materials, under your Inara account with your Inara API key. The client identifies to Inara as EDCMDR-client.
@@ -25,8 +25,6 @@ Last updated: 20261123
 - Off by default. Only what you play while the client runs is sent, never the imported history; Pause stops it.
 - Uploads go from your computer straight to each service. A batch that fails is kept and retried, including after a restart.
 - Not active when EDLD hosts the client: EDLD's own uploaders handle these there.
-
-## Released in 20261123
 
 ### Added: the EDCMDR client
 
