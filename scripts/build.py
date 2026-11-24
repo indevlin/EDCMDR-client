@@ -2,6 +2,7 @@
 """One-file build with PyInstaller. The build key is injected for the build and removed afterwards.
 
 Key source, first found: $EDCMDR_BUILD_KEY, ~/.config/edcmdr/build.key.
+$INARA_APP_KEY, when set, goes into the build with it.
 Without one the build is unofficial: it runs, but EDCMDR refuses its pushes.
 
   python3 scripts/build.py              local build
@@ -22,6 +23,8 @@ SECRET = ROOT / 'edcmdr' / '_build_secret.py'
 QT_EXCLUDES = ['QtNetwork', 'QtQml', 'QtQuick', 'QtSql', 'QtTest', 'QtXml', 'QtOpenGL', 'QtPdf', 'QtSvg',
                'QtWebEngineCore', 'QtMultimedia', 'QtDBus', 'QtConcurrent', 'QtPrintSupport', 'QtDesigner']
 
+
+OS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
 
 def build_key() -> str | None:
     env = os.environ.get('EDCMDR_BUILD_KEY', '').strip()
@@ -66,7 +69,7 @@ def main() -> int:
 
     sep = ';' if os.name == 'nt' else ':'
     cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--windowed',
-           '--name', f'EDCMDR-{version}-{platform.system().lower()}-{platform.machine().lower()}',
+           '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
            '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
            '--add-data', f'LICENSE{sep}.']
@@ -77,7 +80,8 @@ def main() -> int:
         INFO.write_text(f"VERSION = '{version}'\n")
         print(f'building version {version}')
         if key:
-            SECRET.write_text(f"BUILD_KEY = '{key}'\n")
+            inara = os.environ.get('INARA_APP_KEY', '').strip()
+            SECRET.write_text(f"BUILD_KEY = '{key}'\nINARA_APP_KEY = {inara!r}\n")
         else:
             print('warning: no build key; this build cannot publish to EDCMDR', file=sys.stderr)
         subprocess.run(cmd, cwd=ROOT, check=True)

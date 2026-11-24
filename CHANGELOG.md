@@ -6,8 +6,22 @@ Last updated: 20261123
 
 ## Unreleased
 
-### Added: EDSM and EDAstro uploads
-- New Integrations tab: per commander, send your journal to EDSM (with your EDSM API key) and exploration and travel events to EDAstro (no account; fleet carrier events optional).
+### Added: Inara and Frontier CAPI
+- Inara: your commander, ranks, credits, ships and fittings, travel, missions, engineers and materials, under your Inara account with your Inara API key. The client identifies to Inara as EDCMDR-client.
+- Frontier CAPI: switch it on and verify with Frontier once, and the sign-in stays on your computer (never on edcmdr.com). With EDDN on, your fleet carrier's bartender orders are shared from CAPI when you dock there.
+
+### Fixed
+- In game: shown while the game is running and you are in a session, not at the main menu, however quietly you play; the game is found the way EDLD finds it. The client repeats it every 2 minutes, and the site shows you offline a few minutes after it stops.
+- Journal continuation files (part 2 and up of a long session) are read as the commander's, like the file before them.
+- The Sharing tab no longer shows unused columns for other services; those live on the Integrations tab.
+- Ship values are the game's own hull and module values; stored ships aboard a fleet carrier are shown at the carrier and move with it; the current ship is no longer listed with a stale location.
+- Time pledged to your power is sent with Powerplay.
+
+### Changed: simpler download names
+- `EDCMDR-<version>-linux`, `EDCMDR-<version>-windows.exe` and `EDCMDR-<version>-macos.zip`.
+
+### Added: EDDN, EDSM and EDAstro uploads
+- New Integrations tab: per commander, share markets, outfitting, shipyards and exploration with EDDN, send your journal to EDSM (with your EDSM API key), and send exploration and travel events to EDAstro (no account; fleet carrier events optional).
 - Off by default. Only what you play while the client runs is sent, never the imported history; Pause stops it.
 - Uploads go from your computer straight to each service. A batch that fails is kept and retried, including after a restart.
 - Not active when EDLD hosts the client: EDLD's own uploaders handle these there.

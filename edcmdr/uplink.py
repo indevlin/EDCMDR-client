@@ -13,6 +13,7 @@ import time
 from typing import Callable
 
 from . import NAME, VERSION, journal, keys
+from . import capi, game
 from .integrations import Hub
 from .single import PublisherLock
 from .config import SPEC, Settings
@@ -23,7 +24,7 @@ log = logging.getLogger('edcmdr')
 
 TICK = 1.0
 DEBOUNCE = 60
-PRESENCE_EVERY = 300
+PRESENCE_EVERY = 120
 HELLO_EVERY = 6 * 3600
 VERIFY_POLL = 4
 TRANSIENT = ('net', 'reply', 'rate', 'maintenance', 'clock', 'server', 'replay')
@@ -54,6 +55,7 @@ class Runtime:
         self.verify_next = 0.0
         self.verifier: str | None = None
         self.vtoken: str | None = None
+        self.vkeep: tuple | None = None
         self.verify_note: tuple[str, float] | None = None
         self.leader_of: int | None = None
 
@@ -178,9 +180,12 @@ class Engine:
                                              st, 'press Verify again.'))
                     return
                 r.verify_note = ('Verifying: finishing with Frontier', time.time() + VERIFY_NOTE)
-                r.vtoken = self.client.frontier_token(str(p.get('token_url', '')), {
+                url = str(p.get('token_url', ''))
+                tokens = self.client.frontier_tokens(url, {
                     'grant_type': 'authorization_code', 'client_id': p.get('client_id', ''), 'code': p.get('code', ''),
                     'code_verifier': r.verifier, 'redirect_uri': p.get('redirect_uri', '')})
+                r.vtoken = tokens['access_token']
+                r.vkeep = (tokens, url, str(p.get('client_id', '')), str(p.get('redirect_uri', '')))
             j = self.client.push(key, fid, 'verify-finish', {'access_token': r.vtoken})
         except ProtoError as e:
             if e.code == 'upstream':
@@ -190,6 +195,8 @@ class Engine:
                 raise
             self._verify_end(r, str(e))
             return
+        if r.vkeep and Hub.config(self.settings, fid, 'capi')['enabled']:
+            capi.Store(fid).keep(*r.vkeep)
         self._verify_end(r, None)
         r.enrolled, r.verified = True, True
         r.pub_id = j.get('pub_id') or r.pub_id
@@ -200,7 +207,7 @@ class Engine:
 
     @staticmethod
     def _verify_end(r: Runtime, why: str | None) -> None:
-        r.verify_until, r.verifier, r.vtoken = 0.0, None, None
+        r.verify_until, r.verifier, r.vtoken, r.vkeep = 0.0, None, None, None
         r.verify_note = (f'Verification failed: {why}', time.time() + VERIFY_NOTE) if why else None
 
     def _ensure_enrolled(self, fid: str) -> None:
@@ -278,7 +285,7 @@ class Engine:
                            'leader_of': r.leader_of,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'verify': r.verify_note[0] if r.verify_note and r.verify_note[1] > time.time() else None,
-                           'in_game': c.presence()['in_game']})
+                           'in_game': c.presence(self._running(c.fid))['in_game']})
             return {'state': self.state, 'status': self.status, 'official': self.client.official,
                     'server': self.client.base, 'commanders': cm, 'update': self.update_available()}
 
@@ -292,9 +299,10 @@ class Engine:
             c = self.cmdrs[fid] = Commander(fid)
         c.handle(ev)
         if self.hub is not None:
-            self.hub.observe(fid, ev)
             if self.watcher.imported and self.state == 'running':
-                self.hub.live(fid, ev)
+                self.hub.live(fid, ev, self.watcher.current)
+            else:
+                self.hub.observe(fid, ev)
 
     def run(self) -> None:
         while not self._stop.is_set():
@@ -447,10 +455,13 @@ class Engine:
                 r.sent[cat] = cats[cat][1]
         r.last_push = now
 
+    def _running(self, fid: str) -> bool:
+        return game.running(self.watcher.where.get(fid))
+
     def _presence(self, c: Commander, r: Runtime, key, prefs: dict, now: float) -> None:
         if not prefs['presence']:
             return
-        p = c.presence()
+        p = c.presence(self._running(c.fid))
         d = digest(p)
         last_d, last_t = r.presence_sent
         if d == last_d and (not p['in_game'] or now - last_t < PRESENCE_EVERY) and not self.force:
