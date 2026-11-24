@@ -69,7 +69,9 @@ def main() -> int:
         sys.exit(f'{SECRET} is tracked by git; remove it from the index first')
 
     sep = ';' if os.name == 'nt' else ':'
-    cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--windowed',
+    # macOS gets an .app bundle, which is a folder: one-file mode makes no sense there.
+    mode = '--onedir' if platform.system() == 'Darwin' else '--onefile'
+    cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', mode, '--windowed',
            '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
            '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
