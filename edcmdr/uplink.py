@@ -58,6 +58,7 @@ class Runtime:
         self.vkeep: tuple | None = None
         self.verify_note: tuple[str, float] | None = None
         self.leader_of: int | None = None
+        self.leader_squadron: dict | None = None
 
     def note(self, j: dict) -> dict:
         """Take verified and leader_of from a reply that carries them."""
@@ -65,6 +66,8 @@ class Runtime:
             self.verified = bool(j['verified'])
         if 'leader_of' in j:
             self.leader_of = j['leader_of'] if isinstance(j['leader_of'], int) else None
+            sq = j.get('leader_squadron')
+            self.leader_squadron = sq if self.leader_of is not None and isinstance(sq, dict) and sq.get('id') == self.leader_of else None
         return j
 
 
@@ -238,12 +241,20 @@ class Engine:
         self._notify()
         return str(j.get('portrait', ''))
 
-    def save_squadron(self, fid: str, details: dict) -> None:
+    def save_squadron(self, fid: str, details: dict, squadron_id: int) -> dict:
+        """Save the details of the squadron this commander leads; the server refuses any other squadron."""
         with self.lock:
             self._ensure_enrolled(fid)
             r = self._rt(fid)
-            r.note(self.client.push(keys.commander_key(fid), fid, 'squadron', details))
-        self.settings.set_commander(fid, squadron_details=details)
+            try:
+                j = r.note(self.client.push(keys.commander_key(fid), fid, 'squadron', dict(details, squadron_id=squadron_id)))
+            except ProtoError as e:
+                if e.code == 'not-leader':
+                    r.leader_of, r.leader_squadron = None, None
+                    self._notify()
+                raise
+        self.settings.set_commander(fid, squadron_details=dict(details, squadron_id=squadron_id))
+        return j
 
     def forget(self, fid: str) -> str | None:
         """Ask the server to delete this commander; on success drop the local key and settings."""
@@ -283,7 +294,7 @@ class Engine:
             for fid, c in sorted(self.cmdrs.items(), key=lambda kv: kv[1].name):
                 r = self._rt(fid)
                 cm.append({'fid': fid, 'name': c.name, 'enrolled': r.enrolled, 'verified': r.verified,
-                           'leader_of': r.leader_of,
+                           'leader_of': r.leader_of, 'leader_squadron': r.leader_squadron,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'verify': r.verify_note[0] if r.verify_note and r.verify_note[1] > time.time() else None,
                            'in_game': c.presence(self._running(c.fid))['in_game']})

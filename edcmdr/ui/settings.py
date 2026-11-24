@@ -184,8 +184,12 @@ class SettingsWindow(QWidget):
     def _squadron_tab(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.addWidget(note('You lead this squadron, verified with Frontier. These details appear on its EDCMDR page.'))
+        lay.addWidget(note('Shown for commanders verified with Frontier as their squadron\'s leader. Each edits only '
+                           'the squadron that commander leads; these details appear on its EDCMDR page.'))
         form = QFormLayout()
+        self.sq_name = QLabel('')
+        self.sq_leads: dict = {}
+        self.sq_name.setObjectName('head')
         self.sq_who = QComboBox()
         self.sq_who.currentIndexChanged.connect(self._load_squadron)
         self.sq_home = QLineEdit()
@@ -201,7 +205,7 @@ class SettingsWindow(QWidget):
             self.sq_recruit.addItem(v, k or None)
         self.sq_tagline = QLineEdit()
         self.sq_tagline.setMaxLength(SPEC['limits']['tagline_len'])
-        for label, field in (('Commander', self.sq_who), ('Home system', self.sq_home), ('Power', self.sq_power),
+        for label, field in (('Commander', self.sq_who), ('Squadron', self.sq_name), ('Home system', self.sq_home), ('Power', self.sq_power),
                              ('Supported factions', self.sq_factions), ('Recruiting', self.sq_recruit),
                              ('Tagline', self.sq_tagline)):
             form.addRow(label, field)
@@ -219,18 +223,32 @@ class SettingsWindow(QWidget):
             self.tabs.insertTab(2, self.sq_widget, 'Squadron')
         elif not leaders and idx >= 0:
             self.tabs.removeTab(idx)
-        fids = [c['fid'] for c in leaders]
-        if [self.sq_who.itemData(i) for i in range(self.sq_who.count())] != fids:
+        self.sq_leads = {c['fid']: (c['leader_of'], c.get('leader_squadron') or {}) for c in leaders}
+        items = [(c['fid'], f"CMDR {c['name']} · {self._sq_label(c['leader_of'], c.get('leader_squadron'))}") for c in leaders]
+        if [(self.sq_who.itemData(i), self.sq_who.itemText(i)) for i in range(self.sq_who.count())] != items:
+            cur = self.sq_who.currentData()
             self.sq_who.blockSignals(True)
             self.sq_who.clear()
-            for c in leaders:
-                self.sq_who.addItem(f"CMDR {c['name']}", c['fid'])
+            for fid, text in items:
+                self.sq_who.addItem(text, fid)
+            if cur in self.sq_leads:
+                self.sq_who.setCurrentIndex([f for f, _ in items].index(cur))
             self.sq_who.blockSignals(False)
             self._load_squadron()
 
+    @staticmethod
+    def _sq_label(sid, sq) -> str:
+        sq = sq or {}
+        name = sq.get('name') or f'squadron {sid}'
+        return f"{name} [{sq['tag']}]" if sq.get('tag') else name
+
     def _load_squadron(self):
         fid = self.sq_who.currentData()
+        sid, sq = getattr(self, 'sq_leads', {}).get(fid, (None, {}))
+        self.sq_name.setText(self._sq_label(sid, sq) if fid else '')
         d = self.engine.settings.commander(fid).get('squadron_details') or {} if fid else {}
+        if d.get('squadron_id') != sid:
+            d = {}  # details saved for another squadron are not this one's
         self.sq_home.setText(d.get('home_system') or '')
         self.sq_power.setCurrentIndex(max(0, self.sq_power.findData(d.get('power'))))
         self.sq_factions.setText(', '.join(d.get('factions') or []))
@@ -245,12 +263,16 @@ class SettingsWindow(QWidget):
         details = {'home_system': self.sq_home.text().strip() or None, 'power': self.sq_power.currentData(),
                    'factions': factions, 'recruiting': self.sq_recruit.currentData(),
                    'tagline': self.sq_tagline.text().strip() or None}
+        sid, sq = self.sq_leads.get(fid, (None, {}))
+        if sid is None:
+            return
         try:
-            self.engine.save_squadron(fid, details)
+            self.engine.save_squadron(fid, details, sid)
         except ProtoError as e:
             QMessageBox.warning(self, 'Squadron', str(e))
+            self.refresh()
             return
-        QMessageBox.information(self, 'Squadron', 'Saved. The squadron page shows it now.')
+        QMessageBox.information(self, 'Squadron', f'Saved for {self._sq_label(sid, sq)}. Its page shows it now.')
 
     def _forget(self):
         c = self._selected()

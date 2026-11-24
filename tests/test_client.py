@@ -650,8 +650,15 @@ class TestEndToEnd(unittest.TestCase):
         e.tick()
         c = {c['fid']: c for c in e.snapshot()['commanders']}['F1000002']
         self.assertEqual(c['leader_of'], 4343)
-        e.save_squadron('F1000002', {'home_system': 'Deriso', 'power': 'Nakato Kaine', 'factions': ['Test Co'],
-                                     'recruiting': 'open', 'tagline': 'Bravo'})
+        self.assertEqual(c['leader_squadron'], {'id': 4343, 'name': 'BRAVO WING', 'tag': 'BRV'}, 'the tab names the squadron')
+        with self.assertRaises(ProtoError):
+            e.save_squadron('F1000002', {'tagline': 'not ours'}, 4344)
+        self.assertIsNone(e.rt['F1000002'].leader_of, 'a refusal hides the tab until the server says otherwise')
+        e.rt['F1000002'].leader_of = 4343
+        j = e.save_squadron('F1000002', {'home_system': 'Deriso', 'power': 'Nakato Kaine', 'factions': ['Test Co'],
+                                         'recruiting': 'open', 'tagline': 'Bravo'}, 4343)
+        self.assertEqual(j['squadron'], 4343)
+        self.assertEqual(s.commander('F1000002')['squadron_details']['squadron_id'], 4343)
         st, html, _ = ts.request('/squad/brv')
         self.assertIn('Deriso', html)
         self.assertIn('Nakato Kaine', html)
