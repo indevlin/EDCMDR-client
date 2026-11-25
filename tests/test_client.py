@@ -413,7 +413,6 @@ class TestIntegrations(unittest.TestCase):
         self.assertNotIn('locName', items['sales']['1'])
 
     def test_capi_station_to_eddn(self):
-        import jsonschema
         schemas = Path(os.environ.get('EDDN_SCHEMAS', '') or '/nonexistent')
         Svc.station = {
             '/market': {'id': 5, 'name': 'Galileo', 'economies': {'0': {'name': 'Colony', 'proportion': 1.0}},
@@ -446,6 +445,7 @@ class TestIntegrations(unittest.TestCase):
         self.assertEqual(got['shipyard']['message']['ships'], ['adder', 'eagle'])
         self.assertTrue(got['commodity']['message']['horizons'])
         if schemas.is_dir():
+            import jsonschema
             for kind, file in (('commodity', 'commodity-v3.0.json'), ('outfitting', 'outfitting-v2.0.json'),
                                ('shipyard', 'shipyard-v2.0.json')):
                 jsonschema.validate(got[kind], json.loads((schemas / file).read_text()))
