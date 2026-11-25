@@ -76,14 +76,17 @@ class Svc(BaseHTTPRequestHandler):
     """Stands in for EDSM and EDAstro."""
     got: list = []
     fail = 0
+    station: dict = {}
 
     def log_message(self, *a):
         pass
 
     def do_GET(self):
+        if self.path in ('/market', '/shipyard') and self.headers.get('Authorization') != 'Bearer fresh':
+            return self._reply(401, b'{}')
+        if self.path in ('/market', '/shipyard') and Svc.station:
+            return self._reply(200, json.dumps(Svc.station[self.path]).encode())
         if self.path == '/market':
-            if self.headers.get('Authorization') != 'Bearer fresh':
-                return self._reply(401, b'{}')
             return self._reply(200, json.dumps({'id': 900, 'name': 'N2Z-N8M', 'orders': {'onfootmicroresources': {
                 'sales': {'1': {'name': 'chemicalsample', 'locName': 'Chemical Sample', 'price': 100, 'stock': 3}},
                 'purchases': [{'name': 'healthmonitor', 'locName': 'Health Monitor', 'price': 50, 'total': 9}]}}}).encode())
@@ -134,13 +137,14 @@ class TestIntegrations(unittest.TestCase):
         it.Inara.gap = 0.05
         it.EDSM.gap = it.EDAstro.gap = it.EDDN.gap = 0.05
         it.Sender.retry_wait = 30
+        it.CAPI_DELAY = 0.05
 
     @classmethod
     def tearDownClass(cls):
         cls.srv.shutdown()
 
     def setUp(self):
-        Svc.got, Svc.fail = [], 0
+        Svc.got, Svc.fail, Svc.station = [], 0, {}
         self.dir = Path(tempfile.mkdtemp(dir=TMP))
         self.settings = Settings(self.dir / 'settings.json')
 
@@ -277,7 +281,7 @@ class TestIntegrations(unittest.TestCase):
         self.assertEqual(kind, 'inara')
         self.assertEqual(body['header']['appName'], 'EDCMDR-client')
         self.assertEqual((body['header']['APIkey'], body['header']['commanderName']), ('ik', 'Tester'))
-        self.assertNotIn('commanderFrontierID', body['header'], 'the FID goes only with the application key')
+        self.assertEqual(body['header']['commanderFrontierID'], 'F1')
         names = [e['eventName'] for e in body['events']]
         self.assertEqual(names, ['addCommanderTravelFSDJump', 'setCommanderRankPilot'])
         self.assertEqual(body['events'][0]['eventData']['jumpDistance'], 12.35)
@@ -288,10 +292,87 @@ class TestIntegrations(unittest.TestCase):
         from edcmdr import inara
         self.assertEqual(inara.INARA_APP_KEY, '', 'placeholder until Inara issues the application key')
         self.settings.set_integration('F1', 'inara', {'enabled': True, 'api_key': ''})
-        self.hub().live('F1', {'event': 'FSDJump', 'StarSystem': 'Ogmar'})
+        h = self.hub()
+        h.live('F1', {'event': 'FSDJump', 'StarSystem': 'Ogmar', '_cursor': 'c1'})
         time.sleep(0.3)
-        self.assertEqual(Svc.got, [])
+        self.assertEqual(Svc.got, [], 'commander data goes only under the player\'s own key')
+        self.assertIn('no Inara API key', h.senders['inara'].status)
+        self.settings.set_integration('F1', 'inara', {'enabled': True, 'api_key': 'ik'})
+        h.wake()
+        body = self.wait(1)[0][1]
+        self.assertEqual(body['header']['APIkey'], 'ik', 'held events go once the key is set')
         self.assertTrue(inara.throttled(400, 'Too much requests, slow down, cowboy.'))
+
+    def test_inara_documented_events_only(self):
+        from edcmdr import inara
+        documented = {
+            'addCommanderFriend', 'delCommanderFriend', 'addCommanderPermit', 'setCommanderCredits',
+            'setCommanderGameStatistics', 'setCommanderRankEngineer', 'setCommanderRankPilot', 'setCommanderRankPower',
+            'setCommanderReputationMajorFaction', 'setCommanderReputationMinorFaction', 'resetCommanderInventory',
+            'setCommanderInventory', 'setCommanderInventoryCargo', 'setCommanderInventoryMaterials',
+            'setCommanderStorageModules', 'addCommanderShip', 'delCommanderShip', 'setCommanderShip',
+            'setCommanderShipLoadout', 'setCommanderShipTransfer', 'delCommanderSuitLoadout', 'setCommanderSuitLoadout',
+            'updateCommanderSuitLoadout', 'addCommanderTravelCarrierJump', 'addCommanderTravelDock',
+            'addCommanderTravelFSDJump', 'addCommanderTravelLand', 'setCommanderTravelLocation', 'addCommanderMission',
+            'setCommanderMissionAbandoned', 'setCommanderMissionCompleted', 'setCommanderMissionFailed',
+            'addCommanderCombatDeath', 'addCommanderCombatInterdicted', 'addCommanderCombatInterdiction',
+            'addCommanderCombatInterdictionEscape', 'addCommanderCombatKill', 'setCommanderCommunityGoalProgress',
+            'setCommunityGoal'}
+        b = inara.Builder()
+        evs = [
+            {'event': 'LoadGame', 'Credits': 5, 'Loan': 0, 'Ship': 'cobramkv', 'ShipID': 3},
+            {'event': 'Rank', 'Combat': 4}, {'event': 'Promotion', 'Combat': 5},
+            {'event': 'Statistics', 'Bank_Account': {'Current_Wealth': 9}, 'Combat': {'Bounties_Claimed': 1}},
+            {'event': 'Reputation', 'Empire': 50.0}, {'event': 'EngineerProgress', 'Engineer': 'Felicity Farseer', 'Progress': 'Unlocked', 'Rank': 5},
+            {'event': 'PowerplayJoin', 'Power': 'Aisling Duval'}, {'event': 'PowerplayLeave', 'Power': 'Aisling Duval'},
+            {'event': 'FSDJump', 'StarSystem': 'A', 'StarPos': [1, 2, 3], 'JumpDist': 5,
+             'Factions': [{'Name': 'F', 'MyReputation': 25.0}]},
+            {'event': 'CarrierJump', 'StarSystem': 'B', 'Docked': True, 'StationName': 'K', 'MarketID': 1},
+            {'event': 'Location', 'StarSystem': 'B'}, {'event': 'Docked', 'StarSystem': 'B', 'StationName': 'S', 'MarketID': 2},
+            {'event': 'Touchdown', 'PlayerControlled': True, 'Latitude': 1, 'Longitude': 2, 'Body': 'B 1'},
+            {'event': 'DropshipDeploy', 'StarSystem': 'B', 'Body': 'B 1'},
+            {'event': 'MissionAccepted', 'MissionID': 7, 'Name': 'M', 'Faction': 'F', 'DestinationSystem': 'C'},
+            {'event': 'MissionCompleted', 'MissionID': 7, 'Reward': 10, 'PermitsAwarded': ['Sol']},
+            {'event': 'MissionFailed', 'MissionID': 8}, {'event': 'MissionAbandoned', 'MissionID': 9},
+            {'event': 'Died', 'KillerName': 'Cmdr X'}, {'event': 'Interdicted', 'Interdictor': 'Y', 'Submitted': True},
+            {'event': 'Interdiction', 'Interdicted': 'Z', 'Success': True}, {'event': 'EscapeInterdiction', 'Interdictor': 'Y'},
+            {'event': 'PVPKill', 'Victim': 'Cmdr W'}, {'event': 'Friends', 'Name': 'Q', 'Status': 'Added'},
+            {'event': 'Friends', 'Name': 'Q', 'Status': 'Lost'},
+            {'event': 'Materials', 'Raw': [{'Name': 'iron', 'Count': 3}]},
+            {'event': 'Cargo', 'Vessel': 'Ship', 'Inventory': [{'Name': 'gold', 'Count': 2, 'Stolen': 1}]},
+            {'event': 'ShipLocker', 'Items': [{'Name': 'x', 'Count': 1}], 'Components': [], 'Data': [], 'Consumables': []},
+            {'event': 'StoredModules', 'Items': [{'Name': 'int_x', 'BuyPrice': 5, 'StarSystem': 'B', 'MarketID': 2}]},
+            {'event': 'ShipyardNew', 'ShipType': 'mandalay', 'NewShipID': 12},
+            {'event': 'ShipyardSwap', 'ShipType': 'mandalay', 'ShipID': 12, 'SellOldShip': 'sidewinder', 'SellShipID': 1},
+            {'event': 'ShipyardSell', 'ShipType': 'adder', 'SellShipID': 4},
+            {'event': 'SellShipOnRebuy', 'ShipType': 'eagle', 'SellShipId': 5},
+            {'event': 'ShipyardTransfer', 'ShipType': 'cobramkv', 'ShipID': 3, 'TransferTime': 60, 'MarketID': 2},
+            {'event': 'StoredShips', 'StationName': 'S', 'StarSystem': 'B', 'ShipsHere': [{'ShipType': 'eagle', 'ShipID': 6}]},
+            {'event': 'Loadout', 'Ship': 'mandalay', 'ShipID': 12, 'MaxJumpRange': 50.1, 'CargoCapacity': 8,
+             'Modules': [{'Slot': 'Armour', 'Item': 'mandalay_armour_grade1'}]},
+            {'event': 'SuitLoadout', 'LoadoutID': 1, 'SuitID': 2, 'SuitName': 'tacticalsuit', 'Modules': []},
+            {'event': 'RenameSuitLoadout', 'LoadoutID': 1, 'LoadoutName': 'n'}, {'event': 'DeleteSuitLoadout', 'LoadoutID': 1},
+            {'event': 'CommunityGoal', 'CurrentGoals': [{'CGID': 3, 'Title': 'T', 'TierReached': 'Tier 2',
+                                                          'PlayerContribution': 4, 'PlayerPercentileBand': 50}]}]
+        out = []
+        for ev in evs:
+            out += b.events(ev)
+            b.track(ev)
+        names = {n for n, _ in out}
+        self.assertLessEqual(names, documented, 'only events in the Inara API documentation')
+        self.assertEqual(names, documented, 'every documented commander event is produced')
+        d = dict(out)
+        batch = [{'eventName': n, 'eventData': x} for n, x in out]
+        kept = self.it.Inara.coalesce(batch)
+        self.assertEqual([e['eventName'] for e in kept].count('setCommanderRankPilot'), 1)
+        self.assertEqual([e for e in kept if e['eventName'] == 'setCommanderRankPower'][0]['eventData']['rankValue'], -1,
+                         'the last whole-state event is the one kept')
+        self.assertLess([e['eventName'] for e in kept].index('resetCommanderInventory'),
+                        [e['eventName'] for e in kept].index('setCommanderInventory'))
+        self.assertEqual(d['setCommanderShip']['shipMaxJumpRange'], 50.1)
+        self.assertEqual(d['setCommanderRankPower'], {'powerName': 'Aisling Duval', 'rankValue': -1})
+        self.assertEqual(d['addCommanderCombatDeath'], {'starsystemName': 'B', 'opponentName': 'Cmdr X', 'isPlayer': True})
+        self.assertEqual(d['setCommanderInventoryCargo'], [{'itemName': 'gold', 'itemCount': 2, 'isStolen': True}])
 
     def capi_hub(self):
         from edcmdr import capi
@@ -324,6 +405,44 @@ class TestIntegrations(unittest.TestCase):
         self.assertNotIn('locName', items['purchases'][0])
         self.assertNotIn('locName', items['sales']['1'])
 
+    def test_capi_station_to_eddn(self):
+        import jsonschema
+        schemas = Path(os.environ.get('EDDN_SCHEMAS', '') or '/nonexistent')
+        Svc.station = {
+            '/market': {'id': 5, 'name': 'Galileo', 'economies': {'0': {'name': 'Colony', 'proportion': 1.0}},
+                        'prohibited': {'1': 'Slaves'}, 'commodities': [
+                            {'name': 'Gold', 'categoryname': 'Metals', 'legality': '', 'meanPrice': 1, 'buyPrice': 2,
+                             'stock': 3, 'stockBracket': 1, 'sellPrice': 4, 'demand': 0, 'demandBracket': '',
+                             'statusFlags': ['rare']},
+                            {'name': 'Drones', 'categoryname': 'NonMarketable', 'legality': '', 'meanPrice': 1,
+                             'buyPrice': 1, 'stock': 1, 'stockBracket': 1, 'sellPrice': 1, 'demand': 0, 'demandBracket': 0}]},
+            '/shipyard': {'id': 5, 'name': 'Galileo',
+                          'modules': {'1': {'name': 'Int_Engine_Size2_Class1'}, '2': {'name': 'Int_PlanetApproachSuite'},
+                                      '3': {'name': 'Hpt_X', 'sku': 'ELITE_SPECIFIC_V_POWER'}},
+                          'ships': {'shipyard_list': {'Adder': {'name': 'Adder'}}, 'unavailable_list': [{'name': 'Eagle'}]}}}
+        self.settings.set_integration('F1', 'eddn', {'enabled': True})
+        self.settings.set_integration('F1', 'capi', {'enabled': True})
+        h, store = self.capi_hub()
+        h.live('F1', {'event': 'Docked', 'StationType': 'Coriolis', 'StationName': 'Galileo', 'MarketID': 5,
+                      'StarSystem': 'Sol', 'SystemAddress': 10477373803, 'timestamp': 't',
+                      'StationServices': ['dock', 'commodities', 'outfitting', 'shipyard']})
+        got = {g[1]['$schemaRef'].split('/')[-2]: g[1] for g in self.wait(5) if g[0] == 'eddn'}
+        end = time.time() + 3
+        while len(got) < 4 and time.time() < end:
+            time.sleep(0.05)
+            got = {g[1]['$schemaRef'].split('/')[-2]: g[1] for g in Svc.got if g[0] == 'eddn'}
+        self.assertEqual(set(got), {'journal', 'commodity', 'outfitting', 'shipyard'})
+        self.assertEqual([c['name'] for c in got['commodity']['message']['commodities']], ['gold'])
+        self.assertEqual(got['commodity']['header']['gameversion'], 'CAPI-Live-market')
+        self.assertEqual(got['shipyard']['header']['gameversion'], 'CAPI-Live-shipyard')
+        self.assertEqual(got['outfitting']['message']['modules'], ['Int_engine_size2_class1'])
+        self.assertEqual(got['shipyard']['message']['ships'], ['adder', 'eagle'])
+        self.assertTrue(got['commodity']['message']['horizons'])
+        if schemas.is_dir():
+            for kind, file in (('commodity', 'commodity-v3.0.json'), ('outfitting', 'outfitting-v2.0.json'),
+                               ('shipyard', 'shipyard-v2.0.json')):
+                jsonschema.validate(got[kind], json.loads((schemas / file).read_text()))
+
     def test_capi_refused_refresh_forgets(self):
         from edcmdr import capi
         h, store = self.capi_hub()
@@ -334,22 +453,71 @@ class TestIntegrations(unittest.TestCase):
             capi.Client(store, h.capi_base).token()
         self.assertFalse(store.path.exists(), 'a refused sign-in is deleted')
 
-    def test_retry_then_spill(self):
+    def test_retry_keeps_the_mark(self):
         self.settings.set_integration('F1', 'edastro', {'enabled': True})
         Svc.fail = 1
         h = self.hub()
-        time.sleep(0.2)
-        h.live('F1', {'event': 'FSDJump'})
+        h.live('F1', {'event': 'Scan', '_cursor': 'c0'})
         time.sleep(0.4)
         s = h.senders['edastro']
         self.assertIn('retry', s.status)
+        self.assertEqual(h.marks.get('edastro', 'F1'), '', 'switched on with no history: the mark starts empty')
         h.shutdown()
-        self.assertTrue(s.spill.exists())
         h2 = self.it.Hub(self.settings, self.dir / 'q')
         self.addCleanup(h2.shutdown)
-        h2._sender('edastro')
-        self.assertEqual(self.wait(1)[0][1][0]['event'], 'FSDJump')
-        self.assertFalse(s.spill.exists())
+        h2.observe('F1', {'event': 'Scan', '_cursor': 'c0'})
+        self.assertEqual(self.wait(1)[0][1][0]['event'], 'Scan', 'the next run sends it from the journal')
+        time.sleep(0.2)
+        self.assertEqual(h2.marks.get('edastro', 'F1'), 'c0')
+
+    def test_marks_fill_gaps(self):
+        jd = self.dir / 'jd'
+        jd.mkdir()
+        log = jd / 'Journal.2026-11-20T100000.01.log'
+        line = lambda **e: json.dumps({'timestamp': '2026-11-20T10:00:00Z', **e}) + '\n'
+        log.write_text(line(event='Fileheader', part=1, gameversion='4.2.1.0', build='r1') +
+                       line(event='Commander', FID='F1', Name='Tester') + line(event='Scan', BodyName='old'))
+
+        def run():
+            h = self.it.Hub(self.settings, self.dir / 'q')
+            w = journal.Watcher([jd], lambda f, e: h.feed(f, e, jd, live=w.imported))
+            w.poll()
+            h.imported()
+            return h, w
+
+        self.settings.set_integration('F1', 'edastro', {'enabled': True})
+        h, w = run()
+        time.sleep(0.3)
+        self.assertEqual(Svc.got, [], 'switching on starts from now, not from the history')
+        mark = h.marks.get('edastro', 'F1')
+        self.assertTrue(mark.endswith('|Journal.2026-11-20T100000.01.log|' + f'{log.read_bytes().rindex(b"{"):012d}'))
+        with log.open('a') as f:
+            f.write(line(event='Scan', BodyName='live'))
+        w.poll()
+        self.assertEqual(self.wait(1)[0][1][0]['BodyName'], 'live')
+        time.sleep(0.2)
+        h.shutdown()
+        Svc.got = []
+        with log.open('a') as f:
+            f.write(line(event='Scan', BodyName='while closed') + line(event='Scan', BodyName='also closed'))
+        h, w = run()
+        self.addCleanup(h.shutdown)
+        got = self.wait(1)[0][1]
+        self.assertEqual([e['BodyName'] for e in got], ['while closed', 'also closed'], 'only what came after the mark')
+        self.assertNotIn('_cursor', got[0])
+        self.settings.set_integration('F1', 'edastro', {'enabled': False})
+        h.imported()
+        self.assertIsNone(h.marks.get('edastro', 'F1'), 'switching off forgets the place')
+
+    def test_journal_cursor(self):
+        got = []
+        w = journal.Watcher([FIX], lambda f, e: got.append(e['_cursor']))
+        w.poll()
+        self.assertEqual(got, sorted(got), 'cursors sort in journal order')
+        name, off = got[1].split('|')[1:]
+        raw = (FIX / name).read_bytes()
+        self.assertEqual(raw[int(off)], ord('{'))
+        self.assertGreater(int(off), 0)
 
 
 class TestPublisherLock(unittest.TestCase):

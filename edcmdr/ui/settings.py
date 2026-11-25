@@ -376,8 +376,10 @@ class SettingsWindow(QWidget):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.addWidget(note('Optional uploads to community services, sent from this computer straight to each '
-                           'service. Each is off until you switch it on for a commander. Only what you play while '
-                           'the client runs is sent, never your history; Pause stops these uploads too.'))
+                           'service. Each is off until you switch it on for a commander, and starts from that moment, '
+                           'never your older history. After that nothing is missed: play while the client was closed, '
+                           'offline or paused is sent when it next runs, from where each service last accepted. '
+                           'Pause holds these uploads too; switching a service off forgets its place.'))
         top = QHBoxLayout()
         top.addWidget(QLabel('Commander'))
         self.iwho = QComboBox()
@@ -409,7 +411,9 @@ class SettingsWindow(QWidget):
         self.inara_key.setPlaceholderText('From inara.cz → Settings → Inara API key')
         i.addRow(self.inara_on)
         i.addRow('API key', self.inara_key)
-        i.addRow(note('Ranks, credits, ships and their fittings, travel, missions, engineers and materials.'))
+        i.addRow(note('Ranks, credits, statistics, reputation, ships, fittings and stored modules, travel and landings, '
+                      'missions and permits, combat, engineers, cargo, materials and locker, suits, friends and '
+                      'community goals.'))
         lay.addWidget(ina)
         cap = QGroupBox('Frontier CAPI')
         k = QFormLayout(cap)
@@ -418,7 +422,8 @@ class SettingsWindow(QWidget):
         self.capi_state.setWordWrap(True)
         k.addRow(self.capi_on)
         k.addRow(self.capi_state)
-        k.addRow(note('With EDDN on, your fleet carrier bartender orders are shared from CAPI when you dock there. '
+        k.addRow(note('With EDDN on, each station you dock at shares its market, outfitting and shipyard from CAPI, '
+                      'and a fleet carrier its bartender orders. '
                       'The sign-in is kept only here, never on edcmdr.com. After switching this on, press Verify '
                       'with Frontier once to sign in.'))
         lay.addWidget(cap)
@@ -484,6 +489,8 @@ class SettingsWindow(QWidget):
                                                             'api_key': self.inara_key.text().strip()})
         self.engine.settings.set_integration(fid, 'edastro', {'enabled': self.astro_on.isChecked(),
                                                               'carrier': self.astro_carrier.isChecked()})
+        if self.engine.hub is not None:
+            self.engine.hub.wake()
 
     def _about_tab(self) -> QWidget:
         w = QWidget()
