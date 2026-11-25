@@ -30,14 +30,18 @@ Optional, per commander, off by default (Settings → Integrations):
 - **EDDN**: markets, outfitting, shipyards and exploration, on EDDN's schemas, under your commander name.
 - **EDSM**: your journal, sent under your EDSM account with your EDSM API key.
 - **EDAstro**: exploration and travel events, no account; fleet carrier events only if you tick them.
-- **Inara**: your commander, under your Inara account with your Inara API key.
+- **Inara**: your commander, under your Inara account with your Inara API key: every commander event in
+  Inara's API documentation, and nothing outside it.
 - **Frontier CAPI**: keeps your Frontier sign-in on this computer after Verify with Frontier; with EDDN on,
-  shares your fleet carrier's bartender orders when you dock there.
+  shares each docked station's market, outfitting and shipyard, and a fleet carrier's bartender orders.
 
-Only events from play while the client runs are sent, straight from your computer to the service.
+Uploads go straight from your computer to each service. A service starts from the moment it is switched on.
+From then on each keeps its place in the journals, the last event it accepted, and everything after that
+is sent: play while the client was closed, offline or paused is filled in on the next run.
 
-The application name sent to Inara is `EDCMDR-client`. When Inara issues the application key, add it to
-this repository as the `INARA_APP_KEY` secret; release builds carry it from then on.
+The application name sent to Inara is `EDCMDR-client`. Commander data goes under the player's own Inara API
+key. Inara's application key is for its read-only requests; when Inara issues it, add it to this repository
+as the `INARA_APP_KEY` secret and release builds carry it.
 
 ## Run from source
 

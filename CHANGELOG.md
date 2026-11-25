@@ -6,6 +6,12 @@ Last updated: 20261123
 
 ## Unreleased
 
+### Changed: integrations fill gaps
+- Each service keeps its place in your journals: the last event it accepted. Everything after it is sent, so play while the client was closed, offline or paused reaches EDDN, EDSM, EDAstro and Inara on the next run. Switching a service on starts it from that moment; switching it off forgets its place.
+- An upload waiting for an API key, or refused for its key, is held and sent once the key is fixed.
+- Inara: every commander event in Inara's API documentation, and only those: adds statistics, minor faction reputation, permits, landings, combat, friends, ships bought, sold and transferred, stored modules, cargo, the ship locker, suit loadouts, community goals, and fuller missions. Commander data goes only under your own Inara API key.
+- Frontier CAPI: with EDDN on, each station you dock at shares its market, outfitting and shipyard.
+
 ### Added: Inara and Frontier CAPI
 - Inara: your commander, ranks, credits, ships and fittings, travel, missions, engineers and materials, under your Inara account with your Inara API key. The client identifies to Inara as EDCMDR-client.
 - Frontier CAPI: switch it on and verify with Frontier once, and the sign-in stays on your computer (never on edcmdr.com). With EDDN on, your fleet carrier's bartender orders are shared from CAPI when you dock there.
@@ -23,8 +29,7 @@ Last updated: 20261123
 
 ### Added: EDDN, EDSM and EDAstro uploads
 - New Integrations tab: per commander, share markets, outfitting, shipyards and exploration with EDDN, send your journal to EDSM (with your EDSM API key), and send exploration and travel events to EDAstro (no account; fleet carrier events optional).
-- Off by default. Only what you play while the client runs is sent, never the imported history; Pause stops it.
-- Uploads go from your computer straight to each service. A batch that fails is kept and retried, including after a restart.
+- Off by default. Uploads go from your computer straight to each service.
 - Not active when EDLD hosts the client: EDLD's own uploaders handle these there.
 
 ## Released in 20261123

@@ -82,6 +82,8 @@ class Engine:
         # Hosts (EDLD) run their own uploaders; the client's stay off there.
         self.hub = Hub(settings) if NAME == 'EDCMDR-client' else None
         self.state = 'paused' if settings.data.get('start_paused') else 'running'
+        if self.hub is not None:
+            self.hub.paused = self.state != 'running'
         self.status = 'Starting'
         self.server: dict | None = None
         self.hello_at = 0.0
@@ -130,6 +132,8 @@ class Engine:
     def _set_state(self, s: str) -> None:
         with self.lock:
             self.state = s
+        if self.hub is not None:
+            self.hub.set_paused(s != 'running')
         self._notify()
         self._wake.set()
 
@@ -311,10 +315,7 @@ class Engine:
             c = self.cmdrs[fid] = Commander(fid)
         c.handle(ev)
         if self.hub is not None:
-            if self.watcher.imported and self.state == 'running':
-                self.hub.live(fid, ev, self.watcher.current)
-            else:
-                self.hub.observe(fid, ev)
+            self.hub.feed(fid, ev, self.watcher.current, live=self.watcher.imported)
 
     def run(self) -> None:
         while not self._stop.is_set():
@@ -338,12 +339,14 @@ class Engine:
             state = self.state
             if state != 'stopped':
                 first = not self.watcher.imported
-                if self.hub is not None and self.watcher.imported:
+                if self.hub is not None:
                     self.watcher.needles = None if self.hub.any_on() else self.needles
                 self.watcher.poll()
                 if first:
                     for c in self.cmdrs.values():
                         c.loaded = True
+                    if self.hub is not None:
+                        self.hub.imported()
         if state != 'running':
             self.status = {'paused': 'Paused', 'stopped': 'Stopped'}[state]
             self._notify()
