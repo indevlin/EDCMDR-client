@@ -210,6 +210,9 @@ class SettingsWindow(QWidget):
                              ('Tagline', self.sq_tagline)):
             form.addRow(label, field)
         lay.addLayout(form)
+        self.sq_stale = note('')
+        self.sq_stale.hide()
+        lay.addWidget(self.sq_stale)
         save = QPushButton('Save to EDCMDR')
         save.clicked.connect(self._save_squadron)
         lay.addWidget(save, alignment=Qt.AlignLeft)
@@ -224,6 +227,7 @@ class SettingsWindow(QWidget):
         elif not leaders and idx >= 0:
             self.tabs.removeTab(idx)
         self.sq_leads = {c['fid']: (c['leader_of'], c.get('leader_squadron') or {}) for c in leaders}
+        self.sq_stale_fids = {c['fid'] for c in leaders if c.get('squadron_stale')}
         items = [(c['fid'], f"CMDR {c['name']} · {self._sq_label(c['leader_of'], c.get('leader_squadron'))}") for c in leaders]
         if [(self.sq_who.itemData(i), self.sq_who.itemText(i)) for i in range(self.sq_who.count())] != items:
             cur = self.sq_who.currentData()
@@ -235,6 +239,16 @@ class SettingsWindow(QWidget):
                 self.sq_who.setCurrentIndex([f for f, _ in items].index(cur))
             self.sq_who.blockSignals(False)
             self._load_squadron()
+        self._sq_stale_note()
+
+    def _sq_stale_note(self):
+        fid = self.sq_who.currentData()
+        stale = fid in getattr(self, 'sq_stale_fids', set())
+        self.sq_stale.setText('Your journal shows this squadron under a new name. Its EDCMDR page takes the new name; '
+                              'the tag follows once a member\'s client refreshes it from Frontier. Switch on Frontier '
+                              'CAPI on the Integrations tab and this client does that by itself, or press Verify with '
+                              'Frontier on the Commanders tab.' if stale else '')
+        self.sq_stale.setVisible(stale)
 
     @staticmethod
     def _sq_label(sid, sq) -> str:
@@ -246,6 +260,7 @@ class SettingsWindow(QWidget):
         fid = self.sq_who.currentData()
         sid, sq = getattr(self, 'sq_leads', {}).get(fid, (None, {}))
         self.sq_name.setText(self._sq_label(sid, sq) if fid else '')
+        self._sq_stale_note()
         d = self.engine.settings.commander(fid).get('squadron_details') or {} if fid else {}
         if d.get('squadron_id') != sid:
             d = {}  # details saved for another squadron are not this one's

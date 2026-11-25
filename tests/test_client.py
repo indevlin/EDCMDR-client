@@ -609,7 +609,8 @@ class TestState(unittest.TestCase):
         _, cm = load([FIX])
         cats = cm['F1000001'].categories()
         self.assertEqual(cats['identity'], {'name': 'ALPHA ONE'})
-        self.assertEqual(cats['squadron'], {'id': 42, 'name': 'TEST WING', 'rank': 0, 'rank_name': 'Executive Director'})
+        self.assertEqual(cats['squadron'], {'id': 42, 'name': 'TEST WING', 'rank': 0, 'rank_name': 'Executive Director',
+                                            'seen': 1795168807})
         self.assertEqual(cats['powerplay']['merits'], 1202899)
         self.assertEqual(cats['location']['station'], 'Test Port')
         ships = {s['id']: s for s in cats['fleet']['ships']}
@@ -816,6 +817,64 @@ class TestProto(unittest.TestCase):
         with self.assertRaises(ProtoError) as e:
             c.push(self.k, 'F1', 'prefs', {})
         self.assertEqual(e.exception.code, 'build')
+
+
+class TestSquadronRefresh(unittest.TestCase):
+    """A renamed squadron is confirmed again from Frontier without the player."""
+
+    class Pushes:
+        def __init__(self, reply):
+            self.calls, self.reply = [], reply
+
+        def push(self, key, fid, kind, body):
+            self.calls.append((kind, body))
+            if isinstance(self.reply, Exception):
+                raise self.reply
+            return self.reply
+
+    def engine(self, reply, token='tok'):
+        from edcmdr.uplink import Engine, Runtime
+        e = Engine(Settings(TMP / 'sqr.json'), Client('http://127.0.0.1:9'))
+        e.client = self.Pushes(reply)
+        e.frontier_token = lambda fid: token
+        r = Runtime()
+        r.verified = True
+        r.note({'squadron_refresh': True})
+        return e, r
+
+    def test_refreshes_when_asked(self):
+        e, r = self.engine({'refreshed': True, 'leader_of': 7, 'leader_squadron': {'id': 7, 'name': 'NEW', 'tag': 'NEWT'}})
+        e._squadron_refresh('F1', r, None, time.time())
+        self.assertEqual(e.client.calls, [('verify-finish', {'access_token': 'tok', 'refresh': True})])
+        self.assertFalse(r.sq_refresh)
+        self.assertEqual(r.leader_squadron['tag'], 'NEWT', 'the Squadron tab names the new tag at once')
+        e._squadron_refresh('F1', r, None, time.time())
+        self.assertEqual(len(e.client.calls), 1)
+
+    def test_at_most_every_few_hours(self):
+        e, r = self.engine(ProtoError('rate', 'Refreshed recently', 429, {}))
+        now = time.time()
+        e._squadron_refresh('F1', r, None, now)
+        e._squadron_refresh('F1', r, None, now + 60)
+        self.assertEqual(len(e.client.calls), 1)
+        e._squadron_refresh('F1', r, None, now + 7 * 3600)
+        self.assertEqual(len(e.client.calls), 2)
+
+    def test_without_a_sign_in_the_leader_is_told(self):
+        e, r = self.engine({}, token=None)
+        e._squadron_refresh('F1', r, None, time.time())
+        self.assertEqual(e.client.calls, [])
+        self.assertTrue(r.sq_stale)
+        r.note({'squadron_refresh': False})
+        self.assertFalse(r.sq_stale, 'another member refreshed it')
+
+    def test_journal_time_goes_with_the_name(self):
+        c = Commander('F1')
+        c.handle({'timestamp': '2026-11-25T08:00:00Z', 'event': 'SquadronStartup', 'SquadronID': 7,
+                  'SquadronName': 'NEW NAME', 'CurrentRank': 0, 'CurrentRankName': 'Leader'})
+        self.assertEqual(c.squadron['seen'], 1795593600)
+        c.handle({'timestamp': '2026-11-25T09:00:00Z', 'event': 'SquadronPromotion', 'NewRank': 1})
+        self.assertEqual(c.squadron['seen'], 1795593600, 'a promotion does not rename')
 
 
 @unittest.skipUnless(os.environ.get('EDCMDR_SERVER_REPO'), 'EDCMDR_SERVER_REPO not set')

@@ -108,9 +108,18 @@ class Commander:
     def _e_SquadronStartup(self, ev):
         self.squadron = {'id': ev.get('SquadronID'), 'name': ev.get('SquadronName'),
                          'rank': ev.get('CurrentRank'), 'rank_name': ev.get('CurrentRankName')}
+        self._squadron_seen(ev)
 
     def _e_JoinedSquadron(self, ev):
         self.squadron = {'id': ev.get('SquadronID'), 'name': ev.get('SquadronName'), 'rank': None, 'rank_name': None}
+        self._squadron_seen(ev)
+
+    def _squadron_seen(self, ev):
+        """When the journal gave the squadron's name, so the server keeps the newest one after a rename."""
+        try:
+            self.squadron['seen'] = int(datetime.fromisoformat(ev['timestamp'].replace('Z', '+00:00')).timestamp())
+        except (KeyError, TypeError, ValueError, AttributeError):
+            pass
 
     def _e_LeftSquadron(self, ev):
         self.squadron = None
