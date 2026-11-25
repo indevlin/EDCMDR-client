@@ -376,8 +376,9 @@ class SettingsWindow(QWidget):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.addWidget(note('Optional uploads to community services, sent from this computer straight to each '
-                           'service. Each is off until you switch it on for a commander, and starts from that moment, '
-                           'never your older history. After that nothing is missed: play while the client was closed, '
+                           'service. Each is off until you switch it on for a commander, then catches up once: EDSM from '
+                           'where EDSM last saw you, EDDN and EDAstro from your current session, Inara with your '
+                           'commander as they are now. After that nothing is missed: play while the client was closed, '
                            'offline or paused is sent when it next runs, from where each service last accepted. '
                            'Pause holds these uploads too; switching a service off forgets its place.'))
         top = QHBoxLayout()

@@ -35,9 +35,14 @@ Optional, per commander, off by default (Settings → Integrations):
 - **Frontier CAPI**: keeps your Frontier sign-in on this computer after Verify with Frontier; with EDDN on,
   shares each docked station's market, outfitting and shipyard, and a fleet carrier's bartender orders.
 
-Uploads go straight from your computer to each service. A service starts from the moment it is switched on.
-From then on each keeps its place in the journals, the last event it accepted, and everything after that
-is sent: play while the client was closed, offline or paused is filled in on the next run.
+Uploads go straight from your computer to each service. Each keeps its place in the journals, the last
+event it accepted, and everything after that is sent: play while the client was closed, offline or paused
+is filled in on the next run.
+
+A service switched on for the first time catches up once, whatever app the player used before: EDSM from
+the last position EDSM itself holds, EDDN and EDAstro from the start of a session begun within the last day,
+and Inara with the commander's current state (ranks, credits, statistics, reputation, ships, fittings,
+storage, inventory, suits and location) from the last 30 days, without older log entries.
 
 The application name sent to Inara is `EDCMDR-client`. Commander data goes under the player's own Inara API
 key. Inara's application key is for its read-only requests; when Inara issues it, add it to this repository

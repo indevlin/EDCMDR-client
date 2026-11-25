@@ -1,13 +1,14 @@
 # EDCMDR client CHANGELOG
 
-Last updated: 20261123
+Last updated: 20261125
 
 ---
 
-## Unreleased
+## Released in 20261125
 
 ### Changed: integrations fill gaps
-- Each service keeps its place in your journals: the last event it accepted. Everything after it is sent, so play while the client was closed, offline or paused reaches EDDN, EDSM, EDAstro and Inara on the next run. Switching a service on starts it from that moment; switching it off forgets its place.
+- Each service keeps its place in your journals: the last event it accepted. Everything after it is sent, so play while the client was closed, offline or paused reaches EDDN, EDSM, EDAstro and Inara on the next run. Switching a service off forgets its place.
+- Switching a service on catches up once, whatever app you used before: EDSM from the last position EDSM holds for you, EDDN and EDAstro from a session begun within the last day, Inara with your commander's current state from the last 30 days.
 - An upload waiting for an API key, or refused for its key, is held and sent once the key is fixed.
 - Inara: every commander event in Inara's API documentation, and only those: adds statistics, minor faction reputation, permits, landings, combat, friends, ships bought, sold and transferred, stored modules, cargo, the ship locker, suit loadouts, community goals, and fuller missions. Commander data goes only under your own Inara API key.
 - Frontier CAPI: with EDDN on, each station you dock at shares its market, outfitting and shipyard.
