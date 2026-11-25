@@ -1,8 +1,15 @@
 # Integrations
 
 The client can also send your journal to community services, straight from your computer. Each is
-off until you switch it on, per commander, on the **Integrations** tab, and starts from that moment,
-never your older journals.
+off until you switch it on, per commander, on the **Integrations** tab.
+
+When you switch one on, it catches up once without sending your whole history, whatever app you used
+before:
+
+- **EDSM** asks EDSM where it last saw you and sends from there.
+- **EDDN** and **EDAstro** send your current session, if it began within the last day.
+- **Inara** gets your commander as they are now: ranks, credits, statistics, reputation, ships and
+  fittings, storage, inventory, suits and location. Older travel and missions are left alone.
 
 After that nothing is missed. Each service keeps its place: the last thing it accepted from you. Play
 while the client was closed, while you were offline, or while it was paused is sent the next time it

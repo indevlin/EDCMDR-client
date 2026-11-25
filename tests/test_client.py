@@ -77,6 +77,7 @@ class Svc(BaseHTTPRequestHandler):
     got: list = []
     fail = 0
     station: dict = {}
+    position: dict = {}
 
     def log_message(self, *a):
         pass
@@ -90,6 +91,8 @@ class Svc(BaseHTTPRequestHandler):
             return self._reply(200, json.dumps({'id': 900, 'name': 'N2Z-N8M', 'orders': {'onfootmicroresources': {
                 'sales': {'1': {'name': 'chemicalsample', 'locName': 'Chemical Sample', 'price': 100, 'stock': 3}},
                 'purchases': [{'name': 'healthmonitor', 'locName': 'Health Monitor', 'price': 50, 'total': 9}]}}}).encode())
+        if self.path.startswith('/position'):
+            return self._reply(200, json.dumps(Svc.position).encode())
         body = {'/discard': ['Music', 'Friends'], '/interested': ['FSDJump', 'Scan', 'CarrierStatus']}
         self._reply(200, json.dumps(body.get(self.path, [])).encode())
 
@@ -132,6 +135,7 @@ class TestIntegrations(unittest.TestCase):
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         base = f'http://127.0.0.1:{cls.srv.server_address[1]}'
         it.EDSM_DISCARD_URL, it.EDASTRO_INTEREST_URL = base + '/discard', base + '/interested'
+        it.EDSM_POSITION_URL = base + '/position'
         it.EDSM.url, it.EDAstro.url, it.EDDN.url = base + '/edsm', base + '/astro', base + '/eddn'
         it.Inara.url = base + '/inara'
         it.Inara.gap = 0.05
@@ -157,6 +161,9 @@ class TestIntegrations(unittest.TestCase):
     def hub(self):
         h = self.it.Hub(self.settings, self.dir / 'q')
         self.addCleanup(h.shutdown)
+        for s in self.it.SENDERS:
+            if h.config(self.settings, 'F1', s)['enabled']:
+                h.marks.arm(s, 'F1', '')
         for ev in ({'event': 'Fileheader', 'gameversion': '4.2.1.0', 'build': 'r1'},
                    {'event': 'Commander', 'FID': 'F1', 'Name': 'Tester'},
                    {'event': 'FSDJump', 'StarSystem': 'Sol', 'SystemAddress': 10477373803, 'StarPos': [0, 0, 0]}):
@@ -508,6 +515,71 @@ class TestIntegrations(unittest.TestCase):
         self.settings.set_integration('F1', 'edastro', {'enabled': False})
         h.imported()
         self.assertIsNone(h.marks.get('edastro', 'F1'), 'switching off forgets the place')
+
+    def catchup(self, events):
+        """A journal of (hours ago, event) lines, imported by a fresh hub; returns the hub."""
+        jd = self.dir / 'cj'
+        jd.mkdir(exist_ok=True)
+        ts = lambda h: time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() - h * 3600))
+        lines = [{'timestamp': ts(80), 'event': 'Fileheader', 'part': 1, 'gameversion': '4.2.1.0', 'build': 'r1'},
+                 {'timestamp': ts(80), 'event': 'Commander', 'FID': 'F1', 'Name': 'Tester'}]
+        lines += [{'timestamp': ts(h), **e} for h, e in events]
+        (jd / 'Journal.2026-11-20T100000.01.log').write_text(''.join(json.dumps(x) + '\n' for x in lines))
+        h = self.it.Hub(self.settings, self.dir / 'q', lambda: [jd])
+        self.addCleanup(h.shutdown)
+        w = journal.Watcher([jd], lambda f, e: h.feed(f, e, jd, live=w.imported))
+        w.poll()
+        h.imported()
+        end = time.time() + 5
+        while h.pending and time.time() < end:
+            time.sleep(0.02)
+        self.assertFalse(h.pending)
+        return h
+
+    def test_catchup_from_the_session(self):
+        self.settings.set_integration('F1', 'edastro', {'enabled': True})
+        self.catchup([(50, {'event': 'LoadGame', 'Commander': 'Tester'}), (49, {'event': 'Scan', 'BodyName': 'old'}),
+                      (2, {'event': 'LoadGame', 'Commander': 'Tester'}), (1, {'event': 'Scan', 'BodyName': 'today'})])
+        got = self.wait(1)[0][1]
+        self.assertEqual([e['BodyName'] for e in got], ['today'], 'the current session, not the old one')
+
+    def test_catchup_edsm_from_its_position(self):
+        self.settings.set_integration('F1', 'edsm', {'enabled': True, 'api_key': 'k'})
+        when = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 30 * 3600))
+        Svc.position = {'msgnum': 100, 'system': 'B', 'date': when}
+        self.catchup([(40, {'event': 'LoadGame', 'Commander': 'Tester'}), (35, {'event': 'FSDJump', 'StarSystem': 'A'}),
+                      (34, {'event': 'Scan', 'BodyName': 'a'}), (30, {'event': 'FSDJump', 'StarSystem': 'B'}),
+                      (29, {'event': 'Scan', 'BodyName': 'b'}), (3, {'event': 'Scan', 'BodyName': 'b2'})])
+        msg = json.loads(self.wait(1)[0][1]['message'])
+        self.assertEqual([m.get('BodyName') for m in msg], ['b', 'b2'], 'after the jump EDSM last knows')
+        self.assertEqual(msg[0]['_systemName'], 'B')
+
+    def test_catchup_inara_state_only(self):
+        self.settings.set_integration('F1', 'inara', {'enabled': True, 'api_key': 'ik'})
+        h = self.catchup([
+            (900, {'event': 'LoadGame', 'Commander': 'Tester', 'Credits': 1}),
+            (40, {'event': 'LoadGame', 'Commander': 'Tester', 'Credits': 5, 'Ship': 'adder', 'ShipID': 2}),
+            (39, {'event': 'Loadout', 'Ship': 'adder', 'ShipID': 2, 'Modules': [{'Slot': 'Armour', 'Item': 'a'}]}),
+            (38, {'event': 'FSDJump', 'StarSystem': 'A', 'StarPos': [1, 2, 3]}),
+            (37, {'event': 'MissionAccepted', 'MissionID': 4, 'Name': 'm'}),
+            (36, {'event': 'Loadout', 'Ship': 'eagle', 'ShipID': 3, 'Modules': [{'Slot': 'Armour', 'Item': 'e'}]}),
+            (35, {'event': 'ShipyardSell', 'ShipType': 'adder', 'SellShipID': 2}),
+            (2, {'event': 'LoadGame', 'Commander': 'Tester', 'Credits': 9}),
+            (1, {'event': 'Docked', 'StarSystem': 'A', 'StationName': 'S', 'MarketID': 7})])
+        body = self.wait(1)[0][1]
+        names = [e['eventName'] for e in body['events']]
+        self.assertNotIn('addCommanderMission', names, 'no old log entries until Inara says it ignores repeats')
+        self.assertNotIn('addCommanderTravelFSDJump', names)
+        self.assertNotIn('addCommanderTravelDock', names)
+        credits = [e['eventData'] for e in body['events'] if e['eventName'] == 'setCommanderCredits']
+        self.assertEqual([c['commanderCredits'] for c in credits], [9])
+        ships = {e['eventData']['shipGameID']: e['eventName'] for e in body['events']
+                 if e['eventName'] in ('setCommanderShip', 'delCommanderShip')}
+        self.assertEqual(ships, {2: 'delCommanderShip', 3: 'setCommanderShip'})
+        self.assertEqual([e['eventData']['shipGameID'] for e in body['events'] if e['eventName'] == 'setCommanderShipLoadout'], [3])
+        loc = [e['eventData'] for e in body['events'] if e['eventName'] == 'setCommanderTravelLocation'][-1]
+        self.assertEqual((loc['starsystemName'], loc.get('stationName')), ('A', 'S'))
+        self.assertEqual(h.marks.get('inara', 'F1'), h.latest['F1'], 'then on from now')
 
     def test_journal_cursor(self):
         got = []
