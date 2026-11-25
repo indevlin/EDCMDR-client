@@ -6,6 +6,11 @@ Last updated: 20261125
 
 ## Released in 20261125
 
+### Changed: renamed squadrons follow by themselves
+- Squadron names go to ED Commanders with the time your journal gave them, so after a rename the new name sticks even while other members still show the old one.
+- When ED Commanders asks, a verified commander with a Frontier sign-in kept here (Frontier CAPI on) confirms the squadron with Frontier by itself, so a new name and tag appear without anyone verifying again. At most every six hours.
+- The Squadron tab says when that can't happen from this computer.
+
 ### Changed: integrations fill gaps
 - Each service keeps its place in your journals: the last event it accepted. Everything after it is sent, so play while the client was closed, offline or paused reaches EDDN, EDSM, EDAstro and Inara on the next run. Switching a service off forgets its place.
 - Switching a service on catches up once, whatever app you used before: EDSM from the last position EDSM holds for you, EDDN and EDAstro from a session begun within the last day, Inara with your commander's current state from the last 30 days.

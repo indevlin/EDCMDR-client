@@ -29,6 +29,7 @@ HELLO_EVERY = 6 * 3600
 VERIFY_POLL = 4
 TRANSIENT = ('net', 'reply', 'rate', 'maintenance', 'clock', 'server', 'replay')
 VERIFY_NOTE = 600
+REFRESH_EVERY = 6 * 3600
 BACKOFF_MIN, BACKOFF_MAX = 30, 900
 
 
@@ -59,11 +60,18 @@ class Runtime:
         self.verify_note: tuple[str, float] | None = None
         self.leader_of: int | None = None
         self.leader_squadron: dict | None = None
+        self.sq_refresh = False
+        self.sq_refresh_next = 0.0
+        self.sq_stale = False
 
     def note(self, j: dict) -> dict:
         """Take verified and leader_of from a reply that carries them."""
         if 'verified' in j:
             self.verified = bool(j['verified'])
+        if 'squadron_refresh' in j:
+            self.sq_refresh = bool(j['squadron_refresh'])
+            if not self.sq_refresh:
+                self.sq_stale = False
         if 'leader_of' in j:
             self.leader_of = j['leader_of'] if isinstance(j['leader_of'], int) else None
             sq = j.get('leader_squadron')
@@ -96,6 +104,8 @@ class Engine:
         self._wake = threading.Event()
         self.thread: threading.Thread | None = None
         self.publisher = PublisherLock()
+        # A Frontier access token for a commander, or None: the client's kept CAPI sign-in; hosts may supply theirs.
+        self.frontier_token: Callable[[str], str | None] = self._kept_token
         self.standby_at = 0.0
 
     # ── control ─────────────────────────────────────────────────────────────
@@ -299,6 +309,7 @@ class Engine:
                 r = self._rt(fid)
                 cm.append({'fid': fid, 'name': c.name, 'enrolled': r.enrolled, 'verified': r.verified,
                            'leader_of': r.leader_of, 'leader_squadron': r.leader_squadron,
+                           'squadron_stale': r.sq_stale,
                            'pub_id': r.pub_id, 'blocked': r.blocked, 'error': r.error, 'last_push': r.last_push,
                            'verify': r.verify_note[0] if r.verify_note and r.verify_note[1] > time.time() else None,
                            'in_game': c.presence(self._running(c.fid))['in_game']})
@@ -433,6 +444,7 @@ class Engine:
                 r.prefs_sent = pd
             self._snapshot(c, r, key, prefs, now)
             self._presence(c, r, key, prefs, now)
+            self._squadron_refresh(fid, r, key, now)
             r.error = None
         except ProtoError as e:
             if e.code in ('claimed', 'not-enrolled'):
@@ -444,6 +456,39 @@ class Engine:
                 r.error = f'{e} ({e.extra.get("field") or e.extra.get("category") or ""})'.strip()
                 return
             raise
+
+    @staticmethod
+    def _kept_token(fid: str) -> str | None:
+        store = capi.Store(fid)
+        if not store.signed_in():
+            return None
+        try:
+            return capi.Client(store).token()
+        except (capi.SignInNeeded, OSError, ValueError) as e:
+            log.info('Frontier sign-in for a squadron refresh: %s', e)
+            return None
+
+    def _squadron_refresh(self, fid: str, r: Runtime, key, now: float) -> None:
+        """The server says this commander's squadron goes by a name Frontier has not confirmed (renamed, perhaps
+        with a new tag): with a Frontier sign-in at hand, confirm it again, no player needed."""
+        if not (r.sq_refresh and r.verified) or now < r.sq_refresh_next:
+            return
+        r.sq_refresh_next = now + REFRESH_EVERY
+        token = self.frontier_token(fid)
+        if not token:
+            r.sq_stale = True
+            return
+        try:
+            j = r.note(self.client.push(key, fid, 'verify-finish', {'access_token': token, 'refresh': True}))
+        except ProtoError as e:
+            if e.code in ('net', 'reply', 'server', 'maintenance', 'upstream'):
+                r.sq_refresh_next = now + 600
+            log.info('squadron refresh: %s', e)
+            return
+        if j.get('refreshed'):
+            r.sq_refresh, r.sq_stale = False, False
+            r.pub_id = j.get('pub_id') or r.pub_id
+            self._notify()
 
     def _snapshot(self, c: Commander, r: Runtime, key, prefs: dict, now: float) -> None:
         cats = {}
