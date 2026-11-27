@@ -4,7 +4,7 @@ Last updated: 20261126
 
 ---
 
-## Unreleased
+## Released in 20261126
 
 ### Added: carriers
 - New **Carriers** section on Sharing: your fleet carrier and the squadron carrier you can manage, with name, callsign, location, docking, services, space and packs, kept current from your journal (carrier management, jumps, bank transfers, services, fuel, renames and decommissioning). A squadron carrier leaves when you leave the squadron; a decommissioned carrier leaves once its time is up.
