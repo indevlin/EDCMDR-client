@@ -8,7 +8,7 @@ Last updated: 20261126
 
 ### Added: carriers
 - New **Carriers** section on Sharing: your fleet carrier and the squadron carrier you can manage, with name, callsign, location, docking, services, space and packs, kept current from your journal (carrier management, jumps, bank transfers, services, fuel, renames and decommissioning). A squadron carrier leaves when you leave the squadron; a decommissioned carrier leaves once its time is up.
-- With net worth on, each carrier's bank balance goes too. Your page adds your fleet carrier's bank to Frontier's net worth, which leaves it out.
+- With net worth on, each carrier's bank balance goes too; ED Commanders shows a squadron carrier's bank only from the squadron's leader. Your page adds your fleet carrier's bank to Frontier's net worth, which leaves it out.
 - Needs ED Commanders from the same release or later.
 
 ### Fixed

@@ -22,7 +22,8 @@ Your commander's name is always shown. Two extra choices:
 - **Include net worth and carrier bank balances.** Frontier's figure counts your credits, ships and modules,
   and any carrier you paid for, at Frontier's own valuation, but never the money in a carrier's bank. Your
   page shows Frontier's figure, adds your own fleet carrier's bank, and shows a squadron carrier's bank
-  separately, since that money is the squadron's. Off, all of it stays private.
+  separately, since that money is the squadron's. A squadron carrier's bank appears only when the squadron's
+  leader shares it. Off, all of it stays private.
 - **Let my earlier commander names find this page.** Off, an old name leads nowhere.
 
 Your choices are saved and sent as you make them.
