@@ -645,6 +645,58 @@ class TestState(unittest.TestCase):
                          'a ship aboard a carrier moves with it; the current ship is not listed')
         self.assertNotIn('market', cats['fleet']['ships'][0])
 
+    def test_default_squadron_rank_titles(self):
+        c = Commander('F1')
+        c.handle({'event': 'SquadronStartup', 'timestamp': '2026-11-20T10:00:00Z', 'SquadronID': 7, 'SquadronName': 'X',
+                  'CurrentRank': 0, 'CurrentRankName': '$Squadron_DefaultRankName_Rank0;'})
+        self.assertEqual(c.categories()['squadron']['rank_name'], 'Leader')
+        c.handle({'event': 'SquadronDemotion', 'SquadronName': 'X', 'OldRank': 0, 'NewRank': 4})
+        self.assertEqual(c.categories()['squadron']['rank_name'], 'Rookie', 'no new name: the default for the new rank')
+        c.handle({'event': 'SquadronPromotion', 'SquadronName': 'X', 'OldRank': 4, 'NewRank': 1, 'NewRankName': 'Wing Lead'})
+        self.assertEqual(c.categories()['squadron']['rank_name'], 'Wing Lead')
+
+    def test_carriers(self):
+        """Own fleet carrier and the squadron carrier, from real journal shapes."""
+        c = Commander('F1')
+        crew = [{'CrewRole': 'Captain', 'Activated': True, 'Enabled': True},
+                {'CrewRole': 'Refuel', 'Activated': True, 'Enabled': True},
+                {'CrewRole': 'Bartender', 'Activated': True, 'Enabled': False},
+                {'CrewRole': 'BlackMarket', 'Activated': False}]
+        for ev in (
+            {'event': 'SquadronStartup', 'SquadronID': 7, 'SquadronName': 'HOES', 'CurrentRank': 0, 'CurrentRankName': 'Boss'},
+            {'timestamp': '2026-11-23T03:37:01Z', 'event': 'CarrierStats', 'CarrierID': 900, 'CarrierType': 'FleetCarrier',
+             'Callsign': 'N2Z-N8M', 'Name': 'VECTURA', 'DockingAccess': 'squadron', 'AllowNotorious': True, 'FuelLevel': 687,
+             'PendingDecommission': False,
+             'SpaceUsage': {'TotalCapacity': 25000, 'Crew': 6020, 'Cargo': 4342, 'FreeSpace': 12638},
+             'Finance': {'CarrierBalance': 402756911, 'ReserveBalance': 180290031}, 'Crew': crew,
+             'ShipPacks': [], 'ModulePacks': [{'PackTheme': 'x'}]},
+            {'timestamp': '2026-11-22T09:49:28Z', 'event': 'CarrierBuy', 'CarrierType': 'SquadronCarrier', 'CarrierID': 901,
+             'Location': 'Deriso', 'Price': 25000000000, 'Callsign': 'N2Z-N8M'},
+            {'event': 'CarrierBankTransfer', 'CarrierID': 901, 'CarrierType': 'SquadronCarrier', 'Deposit': 2000000000,
+             'CarrierBalance': 2000000000},
+            {'event': 'CarrierNameChange', 'CarrierID': 901, 'Name': 'TRITIUM', 'Callsign': 'HOES'},
+            {'event': 'CarrierCrewServices', 'CarrierID': 901, 'CrewRole': 'Shipyard', 'Operation': 'Activate'},
+            {'event': 'CarrierCrewServices', 'CarrierID': 900, 'CrewRole': 'Refuel', 'Operation': 'Pause'},
+            {'event': 'CarrierDepositFuel', 'CarrierID': 900, 'Amount': 313, 'Total': 1000},
+            {'event': 'CarrierLocation', 'CarrierType': 'SquadronCarrier', 'CarrierID': 901, 'StarSystem': 'Ogmar'},
+            {'event': 'CarrierFinance', 'CarrierID': 900, 'CarrierBalance': 500, 'ReserveBalance': 100},
+            {'event': 'CarrierStats', 'CarrierID': 5, 'CarrierType': 'Battleship'},
+        ):
+            c.handle(ev)
+        out = c.categories()['carriers']['carriers']
+        self.assertEqual([k['id'] for k in out], [900, 901], 'own fleet carrier first; unknown types ignored')
+        fc, sc = out
+        self.assertEqual((fc['fuel'], fc['balance'], fc['reserve'], fc['services'], fc['module_packs']),
+                         (1000, 500, 100, [], 1), 'captain is not a service; paused and inactive roles are off')
+        self.assertEqual(fc['space']['free'], 12638)
+        self.assertEqual((sc['type'], sc['name'], sc['callsign'], sc['system'], sc['balance'], sc['services']),
+                         ('SquadronCarrier', 'TRITIUM', 'HOES', 'Ogmar', 2000000000, ['Shipyard']),
+                         "CarrierBuy's callsign is not trusted")
+        c.handle({'event': 'CarrierDecommission', 'CarrierID': 900, 'ScrapRefund': 1, 'ScrapTime': int(time.time()) - 5})
+        self.assertEqual([k['id'] for k in c.categories()['carriers']['carriers']], [901], 'gone once decommissioned')
+        c.handle({'event': 'LeftSquadron', 'SquadronName': 'HOES'})
+        self.assertNotIn('carriers', c.categories(), 'leaving the squadron leaves its carrier')
+
     def test_tails_new_journals(self):
         """Journals that appear while running are picked up, continuation parts included."""
         d = Path(tempfile.mkdtemp(dir=TMP))
@@ -977,7 +1029,8 @@ class TestEndToEnd(unittest.TestCase):
         s = Settings(TMP / 'e2e-settings.json')
         s.data['journal_dirs'] = [str(FIX)]
         p = s.prefs('F1000001')
-        p['share'].update(ranks=True, statistics=True, fleet=True, squadron=True, location=True, powerplay=True)
+        p['share'].update(ranks=True, statistics=True, fleet=True, squadron=True, location=True, powerplay=True,
+                          carriers=True)
         p['delay']['location'] = 3600
         s.set_prefs('F1000001', p)
         e = Engine(s, Client(self.base))
@@ -994,6 +1047,10 @@ class TestEndToEnd(unittest.TestCase):
         self.assertNotIn('Current wealth', html)
         st, html, _ = self.ts.request('/squadron/42/test-wing')
         self.assertIn('Executive Director', html)
+        st, html, _ = self.ts.request('/cmdr/alpha-one?tab=carriers')
+        self.assertIn('TEST DECK', html)
+        self.assertIn('Fleet carrier · Q2X-T7K', html)
+        self.assertNotIn('987.7 m Cr', html, 'carrier banks only with net worth')
         e.tick()
         self.assertEqual(e.status, 'Connected', 'second pass sends nothing new and stays connected')
         self._verify_takeover()

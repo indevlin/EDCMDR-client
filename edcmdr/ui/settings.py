@@ -16,6 +16,7 @@ from ..uplink import Engine
 LABELS = {
     'location': 'Location and where ships are kept', 'ranks': 'Ranks and reputation',
     'statistics': 'Lifetime statistics (leaderboards)', 'fleet': 'Fleet and fittings',
+    'carriers': 'Fleet carrier and squadron carrier',
     'engineering': 'Engineers', 'powerplay': 'Powerplay', 'squadron': 'Squadron and rank',
     'portrait': 'Codex portrait', 'presence': 'Show when I am in game',
 }
@@ -346,7 +347,9 @@ class SettingsWindow(QWidget):
             grid.addWidget(cb, r, 1, alignment=Qt.AlignCenter)
             grid.addWidget(dl, r, 2)
         lay.addLayout(grid)
-        self.wealth = QCheckBox('Include net worth (credits plus ships, modules and carriers) with lifetime statistics')
+        self.wealth = QCheckBox('Include net worth and carrier bank balances (with lifetime statistics)')
+        self.wealth.setToolTip('Frontier\'s net worth figure with your statistics, and the bank balance of each carrier '
+                               'you share. Your page adds your own fleet carrier\'s bank to Frontier\'s figure, which leaves it out.')
         self.names = QCheckBox('Let my earlier commander names find this page')
         for x in (self.wealth, self.names):
             x.toggled.connect(self._save_prefs)

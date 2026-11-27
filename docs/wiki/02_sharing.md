@@ -9,6 +9,7 @@ until then. Portraits appear at once.
 | Ranks | Pilot ranks and progress, navy ranks, superpower reputation |
 | Statistics | Your lifetime statistics, and the leaderboards they place you on |
 | Fleet | Your ships, their fittings and engineering |
+| Carriers | Your fleet carrier and your squadron's carrier: name, callsign, where it is, docking, services, space and packs, as your journal last showed them (open the carrier's management screen in game to refresh). A squadron carrier also appears on the squadron's page |
 | Location | Where you are, and where your ships are stored |
 | Engineering | Engineers you know, have been invited by or have unlocked |
 | Powerplay | Your power, rank, merits and time pledged |
@@ -18,8 +19,10 @@ until then. Portraits appear at once.
 
 Your commander's name is always shown. Two extra choices:
 
-- **Include net worth with lifetime statistics.** The game's own figure: your credits plus the value of
-  your ships, modules and carriers. Off, it stays private.
+- **Include net worth and carrier bank balances.** Frontier's figure counts your credits, ships and modules,
+  and any carrier you paid for, at Frontier's own valuation, but never the money in a carrier's bank. Your
+  page shows Frontier's figure, adds your own fleet carrier's bank, and shows a squadron carrier's bank
+  separately, since that money is the squadron's. Off, all of it stays private.
 - **Let my earlier commander names find this page.** Off, an old name leads nowhere.
 
 Your choices are saved and sent as you make them.
