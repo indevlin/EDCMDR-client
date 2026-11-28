@@ -1071,8 +1071,9 @@ class TestEndToEnd(unittest.TestCase):
         import datetime as dt
         ts = self.ts
         now = int(time.time())
-        j = e.event_admin('F1000002', 'save', title='Bounty Week', metric='bounty_value', starts=now - 2 * 86400,
-                          ends=now + 86400, payout={'pool': 5_000_000, 'places': [1]})
+        d0 = now - now % 86400
+        j = e.event_admin('F1000002', 'save', title='Bounty Week', metric='bounty_value', starts=d0 - 2 * 86400,
+                          ends=d0 + 2 * 86400 - 1, payout={'pool': 5_000_000, 'places': [1]})
         self.assertEqual(j['event']['title'], 'Bounty Week')
         y = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime('%Y-%m-%dT12:00:00Z')
         ts.Frontier.days = {1: json.dumps({'timestamp': y, 'event': 'Bounty', 'TotalReward': 125000}) + '\n'}
