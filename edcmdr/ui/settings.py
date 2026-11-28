@@ -99,7 +99,7 @@ class SettingsWindow(QWidget):
         g2l.addLayout(row2)
         lay.addWidget(g2)
 
-        g3 = QGroupBox('Squad Goals')
+        g3 = QGroupBox('Squad Goals (beta)')
         g3l = QVBoxLayout(g3)
         self.squad = note('')
         row3 = QHBoxLayout()
@@ -622,5 +622,6 @@ class SettingsWindow(QWidget):
                   self.squad_sync_btn):
             x.setEnabled(has)
         self.squad.setText('\n'.join(snap.get('squad') or [])
-                           or "Your squadron's events show here once its leader runs one (EDLD).")
+                           or "Your squadron's events show here once its leader runs one (EDLD). Squad Goals is in "
+                              "beta: feedback and bug reports are welcome on the Indevlin Discord.")
         self._sync_squadron_tab(cm)

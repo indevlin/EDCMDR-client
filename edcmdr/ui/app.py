@@ -91,7 +91,7 @@ class Tray:
         if notices:
             text += '\n' + '\n'.join(f"CMDR {n['name']}: {n['text']}" for n in notices)
         if s.get('squad'):
-            text += '\nSquad Goals:\n' + '\n'.join(s['squad'])
+            text += '\nSquad Goals (beta):\n' + '\n'.join(s['squad'])
         self.tray.setToolTip(text)
         text = text.split('\n', 1)[0]
         self.head.setText(text if len(text) < 60 else text[:57] + '…')

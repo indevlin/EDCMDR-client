@@ -6,7 +6,8 @@ Last updated: 20261128
 
 ## Released in 20261128
 
-### Added: Squad Goals
+### Added: Squad Goals (beta)
+- **Beta:** new and still being tested, and labelled so in the client. Feedback and bug reports are welcome on the Indevlin Discord (https://discord.indevlin.com).
 - Your squadron's events on ED Commanders, run by its leader from EDLD: the tray tooltip and **Settings → Commanders → Squad Goals** show each event you count in, your place, amount and payout. **Use invitation code…** joins an event you were invited to; **Update standings** reads them now.
 - One sign-in: with Frontier CAPI on under Integrations, a commander who is not verified yet is verified with that sign-in by itself, with no browser step. Verify with Frontier is still there for a computer without it.
 - **Take part in my squadron's events** (Sharing), on unless switched off. Taking part, ED Commanders reads your journal from Frontier for each event's days with the client's Frontier CAPI sign-in, and counts only what Frontier confirms.

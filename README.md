@@ -48,7 +48,10 @@ The application name sent to Inara is `EDCMDR-client`. Commander data goes under
 key. Inara's application key is for its read-only requests; when Inara issues it, add it to this repository
 as the `INARA_APP_KEY` secret and release builds carry it.
 
-## Squad Goals
+## Squad Goals (beta)
+
+Squad Goals is new and still being tested: expect rough edges, and send feedback and bug reports to the
+Indevlin Discord (https://discord.indevlin.com).
 
 Events a verified squadron leader runs from EDLD show in the tray tooltip and under Settings → Commanders:
 each event you count in, your place, amount and payout. **Use invitation code…** joins one you were invited
