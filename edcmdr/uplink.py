@@ -6,13 +6,14 @@ listen through on_change; nothing here imports Qt.
 import logging
 
 from edcmdr_core import keys
+from edcmdr_core.frontier import signin_notice
 from edcmdr_core.proto import Client
 from edcmdr_core.publisher import Publisher, Runtime  # noqa: F401
+from edcmdr_core.state import EVENTS, Commander
 
 from . import NAME, VERSION, capi, game, journal
 from .config import Settings
 from .integrations import Hub
-from .state import EVENTS, Commander
 
 log = logging.getLogger('edcmdr')
 
@@ -70,6 +71,31 @@ class Engine(Publisher):
         """The newer client build the server announces, or ''."""
         latest = str((self.server or {}).get('latest_client', ''))
         return latest if latest.isdigit() and len(latest) == 8 and latest > VERSION else ''
+
+    def snapshot(self) -> dict:
+        s = super().snapshot()
+        s['notices'] = self.signin_notices()
+        return s
+
+    def signin_notices(self) -> list[dict]:
+        """A Frontier sign-in reminder per commander keeping one here (Frontier CAPI on), unless switched off."""
+        if not self.settings.data.get('signin_reminders', True):
+            return []
+        out = []
+        for fid, c in sorted(self._cmdrs.items(), key=lambda kv: kv[1].name):
+            if not Hub.config(self.settings, fid, 'capi')['enabled']:
+                continue
+            t = capi.Store(fid).load()
+            text = signin_notice(t.get('signed_in'), t.get('expired_at'))
+            if text:
+                out.append({'fid': fid, 'name': c.name, 'text': text})
+        return out
+
+    def set_signin_reminders(self, on: bool) -> None:
+        with self.settings.lock:
+            self.settings.data['signin_reminders'] = bool(on)
+            self.settings.save()
+        self._notify()
 
     # ── the client's own ────────────────────────────────────────────────────
     def set_dirs(self, dirs: list[str]) -> None:

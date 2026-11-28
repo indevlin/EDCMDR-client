@@ -99,7 +99,7 @@ publishing. edcmdr.com mirrors the latest published release within the hour.
 ## Tests
 
 ```sh
-pip install -e ../EDCMDR-core        # working against a local EDCMDR-core checkout
+pip install -e ../EDCMDR-core --config-settings editable_mode=compat   # a local EDCMDR-core checkout
 python3 tests/test_client.py
 EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # plus end-to-end against the server
 ```
@@ -107,9 +107,8 @@ EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # p
 ## Files
 
     edcmdr_client.py     entry point
-    (EDCMDR-core)        protocol, keys, sharing settings and the publisher, pinned in requirements.txt
+    (EDCMDR-core)        protocol, keys, sharing settings, journal events → categories, the publisher; pinned in requirements.txt
     edcmdr/journal.py    discovery, commander routing, tailing
-    edcmdr/state.py      journal events → protocol categories
     edcmdr/uplink.py     the engine: journals and integrations around edcmdr_core's publisher
     edcmdr/integrations.py  optional EDDN, EDSM, EDAstro and Inara uploads
     edcmdr/game.py       whether the game is running

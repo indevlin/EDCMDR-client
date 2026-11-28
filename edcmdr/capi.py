@@ -53,7 +53,11 @@ class Store:
             return
         self.save({'access_token': tokens['access_token'], 'refresh_token': tokens.get('refresh_token'),
                    'expiry': time.time() + int(tokens.get('expires_in') or 7200), 'token_url': token_url,
-                   'client_id': client_id, 'redirect_uri': redirect_uri})
+                   'client_id': client_id, 'redirect_uri': redirect_uri, 'signed_in': time.time()})
+
+    def ended(self) -> None:
+        """Frontier refused the sign-in: drop the tokens, remember when, for the reminder."""
+        self.save({'expired_at': time.time()})
 
     def forget(self) -> None:
         self.path.unlink(missing_ok=True)
@@ -100,7 +104,7 @@ class Client:
                                                'redirect_uri': t.get('redirect_uri', ''),
                                                'refresh_token': t['refresh_token']})
             if status in (400, 401) or (status == 200 and not j.get('access_token')):
-                self.store.forget()
+                self.store.ended()
                 raise SignInNeeded('Frontier ended the sign-in')
             if status != 200:
                 raise OSError(f'Frontier token endpoint: HTTP {status}')

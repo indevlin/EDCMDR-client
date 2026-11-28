@@ -11,15 +11,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDia
 from .. import NAME, VERSION
 from ..config import DELAY_LABELS, DELAYS, SHAREABLE, SPEC
 from edcmdr_core.proto import ProtoError
+from edcmdr_core.settings import LABELS
 from ..uplink import Engine
 
-LABELS = {
-    'location': 'Location and where ships are kept', 'ranks': 'Ranks and reputation',
-    'statistics': 'Lifetime statistics (leaderboards)', 'fleet': 'Fleet and fittings',
-    'carriers': 'Fleet carrier and squadron carrier',
-    'engineering': 'Engineers', 'powerplay': 'Powerplay', 'squadron': 'Squadron and rank',
-    'portrait': 'Codex portrait', 'presence': 'Show when I am in game',
-}
 LATER: dict[str, str] = {}
 UNDELAYED = set(SPEC['undelayed'])
 POWERS = SPEC['powers']

@@ -31,7 +31,7 @@ from edcmdr_core.proto import ProtoError  # noqa: E402
 from edcmdr import journal  # noqa: E402
 from edcmdr.config import Settings  # noqa: E402
 from edcmdr.uplink import make_client as Client  # noqa: E402
-from edcmdr.state import EVENTS, Commander  # noqa: E402
+from edcmdr_core.state import EVENTS, Commander  # noqa: E402
 
 FIX = ROOT / 'tests' / 'journals'
 
@@ -461,7 +461,30 @@ class TestIntegrations(unittest.TestCase):
         store.save(t)
         with self.assertRaises(capi.SignInNeeded):
             capi.Client(store, h.capi_base).token()
-        self.assertFalse(store.path.exists(), 'a refused sign-in is deleted')
+        left = store.load()
+        self.assertNotIn('refresh_token', left, 'a refused sign-in is deleted')
+        self.assertNotIn('access_token', left)
+        self.assertIn('expired_at', left, 'when it ended is kept, for the reminder')
+        self.assertFalse(store.signed_in())
+
+    def test_signin_reminders(self):
+        from edcmdr import capi
+        from edcmdr.uplink import Engine
+        s = Settings(TMP / 'remind.json')
+        s.set_integration('F9', 'capi', {'enabled': True})
+        e = Engine(s, Client('http://127.0.0.1:9'))
+        e._cmdrs['F9'] = Commander('F9')
+        e._cmdrs['F9'].name = 'NINE'
+        store = capi.Store('F9')
+        store.save({'access_token': 'a', 'refresh_token': 'r', 'signed_in': time.time() - 10 * 86400})
+        self.assertEqual(e.snapshot()['notices'], [])
+        store.save({'access_token': 'a', 'refresh_token': 'r', 'signed_in': time.time() - 27 * 86400})
+        self.assertIn('ends in about', e.snapshot()['notices'][0]['text'])
+        store.ended()
+        self.assertIn('has ended', e.snapshot()['notices'][0]['text'], 'stays until signed in again')
+        e.set_signin_reminders(False)
+        self.assertEqual(e.snapshot()['notices'], [], 'switched off for good')
+        self.assertFalse(Settings(TMP / 'remind.json').data['signin_reminders'])
 
     def test_retry_keeps_the_mark(self):
         self.settings.set_integration('F1', 'edastro', {'enabled': True})

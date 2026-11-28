@@ -1,4 +1,4 @@
-"""Per-OS locations: default journal directories, bundled data. The config directory is edcmdr_core's."""
+"""Per-OS locations: default journal directories. The config directory is edcmdr_core's."""
 import os
 import sys
 from pathlib import Path
@@ -16,9 +16,4 @@ def default_journal_dirs() -> list[Path]:
                  home / '.var/app/com.valvesoftware.Steam/.local/share/Steam']
         cands = [s / 'steamapps/compatdata/359320/pfx/drive_c/users/steamuser' / rel for s in steam]
     return [c for c in cands if c.is_dir()]
-
-
-def data_dir() -> Path:
-    base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent))
-    return base / 'edcmdr' / 'data' if (base / 'edcmdr' / 'data').is_dir() else Path(__file__).resolve().parent / 'data'
 

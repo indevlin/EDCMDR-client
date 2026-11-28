@@ -73,7 +73,6 @@ def main() -> int:
     mode = '--onedir' if platform.system() == 'Darwin' else '--onefile'
     cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', mode, '--windowed',
            '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
-           '--add-data', f'edcmdr/data{sep}edcmdr/data',
            '--add-data', f'LICENSE{sep}.']
     for m in QT_EXCLUDES:
         cmd += ['--exclude-module', f'PySide6.{m}']

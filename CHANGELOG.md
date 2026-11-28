@@ -1,13 +1,17 @@
 # EDCMDR client CHANGELOG
 
-Last updated: 20261127
+Last updated: 20261128
 
 ---
 
-## Released in 20261127
+## Released in 20261128
+
+### Added: Frontier sign-in reminders
+- With Frontier CAPI on, the tray warns a few days before Frontier's sign-in runs out and once it has ended. The reminder stays in the tray menu until you verify with Frontier again; **Frontier sign-in reminders** in the tray menu turns it off for good. Squadron access on ED Commanders depends on that sign-in.
 
 ### Changed: shared core
-- Publishing to ED Commanders (keys, signed pushes, sharing settings, verification) now comes from EDCMDR-core, the library EDLD also publishes through. Nothing changes for you: same keys, same settings file, same pushes.
+- Publishing to ED Commanders (keys, signed pushes, sharing settings, verification, and turning your journals into what is shared) now comes from EDCMDR-core, the library EDLD also publishes through. Same keys, same settings file, same pushes.
+- A change made in EDLD's ED Commanders settings while the client runs is picked up within a second, and the other way round.
 
 ## Released in 20261126
 

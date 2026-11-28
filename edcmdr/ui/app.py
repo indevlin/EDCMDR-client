@@ -33,13 +33,21 @@ class Tray:
         self.a_resume = QAction('Resume', triggered=engine.resume)
         self.a_stop = QAction('Stop', triggered=engine.halt)
         self.a_push = QAction('Push now', triggered=engine.push_now)
+        self.a_notice = QAction('', triggered=self.show_settings)
+        self.a_notice.setVisible(False)
+        self.a_remind = QAction('Frontier sign-in reminders', checkable=True)
+        self.a_remind.setChecked(bool(engine.settings.data.get('signin_reminders', True)))
+        self.a_remind.toggled.connect(engine.set_signin_reminders)
+        self.shown_notices: set[str] = set()
         self.a_settings = QAction('Settings…', triggered=self.show_settings)
         self.a_exit = QAction('Exit', triggered=self.exit)
         self.menu.addAction(self.head)
+        self.menu.addAction(self.a_notice)
         self.menu.addSeparator()
         for a in (self.a_pause, self.a_resume, self.a_stop, self.a_push):
             self.menu.addAction(a)
         self.menu.addSeparator()
+        self.menu.addAction(self.a_remind)
         self.menu.addAction(self.a_settings)
         self.menu.addAction(self.a_exit)
 
@@ -78,7 +86,12 @@ class Tray:
         when = f" · last push {int((time.time() - last) // 60)} min ago" if last else ''
         upd = f" · update {s['update']} available" if s['update'] else ''
         text = f"EDCMDR — {s['status']}{when}{upd}"
+        notices = s.get('notices') or []
+        self._notices(notices)
+        if notices:
+            text += '\n' + '\n'.join(f"CMDR {n['name']}: {n['text']}" for n in notices)
         self.tray.setToolTip(text)
+        text = text.split('\n', 1)[0]
         self.head.setText(text if len(text) < 60 else text[:57] + '…')
         self.a_pause.setEnabled(state == 'running')
         self.a_resume.setEnabled(state != 'running')
@@ -86,6 +99,21 @@ class Tray:
         self.a_push.setEnabled(state == 'running')
         if self.window and self.window.isVisible():
             self.window.refresh()
+
+    def _notices(self, notices: list[dict]) -> None:
+        """A sign-in reminder stays in the menu until resolved; a new one also pops up once."""
+        if notices:
+            n = notices[0]
+            label = f"⚠ CMDR {n['name']}: Frontier sign-in" + (f' (+{len(notices) - 1})' if len(notices) > 1 else '')
+            self.a_notice.setText(label)
+            self.a_notice.setToolTip(n['text'])
+        self.a_notice.setVisible(bool(notices))
+        for n in notices:
+            key = f"{n['fid']}|{n['text']}"
+            if key not in self.shown_notices and self.has_tray:
+                self.tray.showMessage('EDCMDR', f"CMDR {n['name']}: {n['text']} Verify with Frontier in Settings.",
+                                      QSystemTrayIcon.Warning, 15_000)
+            self.shown_notices.add(key)
 
     def exit(self):
         self.engine.shutdown()
