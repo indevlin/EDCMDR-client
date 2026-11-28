@@ -48,6 +48,17 @@ The application name sent to Inara is `EDCMDR-client`. Commander data goes under
 key. Inara's application key is for its read-only requests; when Inara issues it, add it to this repository
 as the `INARA_APP_KEY` secret and release builds carry it.
 
+## Squad Goals (beta)
+
+Squad Goals is new and still being tested: expect rough edges, and send feedback and bug reports to the
+Indevlin Discord (https://discord.indevlin.com).
+
+Events a verified squadron leader runs from EDLD show in the tray tooltip and under Settings → Commanders:
+each event you count in, your place, amount and payout. **Use invitation code…** joins one you were invited
+to. **Take part in my squadron's events** (Sharing) is on unless switched off; taking part needs Frontier
+CAPI on, as ED Commanders reads your journal from Frontier with that sign-in and counts only what Frontier
+confirms.
+
 ## Run from source
 
 ```sh
@@ -99,6 +110,7 @@ publishing. edcmdr.com mirrors the latest published release within the hour.
 ## Tests
 
 ```sh
+pip install -e ../EDCMDR-core --config-settings editable_mode=compat   # a local EDCMDR-core checkout
 python3 tests/test_client.py
 EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # plus end-to-end against the server
 ```
@@ -106,17 +118,15 @@ EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # p
 ## Files
 
     edcmdr_client.py     entry point
+    (EDCMDR-core)        protocol, keys, sharing settings, journal events → categories, the publisher; pinned in requirements.txt
     edcmdr/journal.py    discovery, commander routing, tailing
-    edcmdr/state.py      journal events → protocol categories
-    edcmdr/proto.py      signed pushes, signed-reply checks
-    edcmdr/uplink.py     the engine: sharing, debounce, retries
+    edcmdr/uplink.py     the engine: journals and integrations around edcmdr_core's publisher
     edcmdr/integrations.py  optional EDDN, EDSM, EDAstro and Inara uploads
     edcmdr/game.py       whether the game is running
     edcmdr/eddn.py       EDDN messages from journal events
     edcmdr/inara.py      Inara events from journal events
     edcmdr/capi.py       Frontier CAPI, with the sign-in kept on this computer
     edcmdr/ui/           tray and settings window
-    protocol/v1/         spec.json, vendored from the EDCMDR server repo (protocol.lock)
     scripts/build.py     one-file build with the build key injected
     docs/wiki/           player documentation, synced to the GitHub wiki
 

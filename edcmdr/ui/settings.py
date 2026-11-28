@@ -5,21 +5,16 @@ import webbrowser
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout,
-                               QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox,
+                               QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
+                               QMessageBox,
                                QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import NAME, VERSION
 from ..config import DELAY_LABELS, DELAYS, SHAREABLE, SPEC
-from ..proto import ProtoError
+from edcmdr_core.proto import ProtoError
+from edcmdr_core.settings import EVENTS_HELP, LABELS
 from ..uplink import Engine
 
-LABELS = {
-    'location': 'Location and where ships are kept', 'ranks': 'Ranks and reputation',
-    'statistics': 'Lifetime statistics (leaderboards)', 'fleet': 'Fleet and fittings',
-    'carriers': 'Fleet carrier and squadron carrier',
-    'engineering': 'Engineers', 'powerplay': 'Powerplay', 'squadron': 'Squadron and rank',
-    'portrait': 'Codex portrait', 'presence': 'Show when I am in game',
-}
 LATER: dict[str, str] = {}
 UNDELAYED = set(SPEC['undelayed'])
 POWERS = SPEC['powers']
@@ -103,7 +98,42 @@ class SettingsWindow(QWidget):
         g2l.addWidget(self.table)
         g2l.addLayout(row2)
         lay.addWidget(g2)
+
+        g3 = QGroupBox('Squad Goals (beta)')
+        g3l = QVBoxLayout(g3)
+        self.squad = note('')
+        row3 = QHBoxLayout()
+        self.join_btn = QPushButton('Use invitation code…')
+        self.join_btn.setToolTip('Join an event you were invited to from outside your squadron.')
+        self.join_btn.clicked.connect(self._join)
+        self.squad_sync_btn = QPushButton('Update standings')
+        self.squad_sync_btn.clicked.connect(self._squad_sync)
+        row3.addWidget(self.join_btn)
+        row3.addWidget(self.squad_sync_btn)
+        row3.addStretch()
+        g3l.addWidget(self.squad)
+        g3l.addLayout(row3)
+        lay.addWidget(g3)
         return w
+
+    def _join(self):
+        c = self._selected()
+        if not c:
+            return
+        code, ok = QInputDialog.getText(self, 'Squad Goals', f"Invitation code for CMDR {c['name']}:")
+        if not ok or not code.strip():
+            return
+        try:
+            j = self.engine.event_join(c['fid'], code.strip())
+        except ProtoError as e:
+            QMessageBox.warning(self, 'Squad Goals', str(e))
+            return
+        QMessageBox.information(self, 'Squad Goals', f"You are in {j.get('event', {}).get('title') or 'the event'}.")
+
+    def _squad_sync(self):
+        c = self._selected()
+        if c:
+            self.engine.sync_events_now(c['fid'])
 
     def _add_dir(self):
         d = QFileDialog.getExistingDirectory(self, 'Journal folder')
@@ -351,9 +381,12 @@ class SettingsWindow(QWidget):
         self.wealth.setToolTip('Frontier\'s net worth figure with your statistics, and the bank balance of each carrier '
                                'you share. Your page adds your own fleet carrier\'s bank to Frontier\'s figure, which leaves it out.')
         self.names = QCheckBox('Let my earlier commander names find this page')
-        for x in (self.wealth, self.names):
+        self.events = QCheckBox(LABELS.get('events', "Take part in my squadron's events"))
+        self.events.setToolTip(EVENTS_HELP)
+        for x in (self.wealth, self.names, self.events):
             x.toggled.connect(self._save_prefs)
             lay.addWidget(x)
+        lay.addWidget(note(EVENTS_HELP + ' It needs Frontier CAPI on in Integrations.'))
         lay.addStretch()
         self._loading = False
         return w
@@ -369,6 +402,7 @@ class SettingsWindow(QWidget):
             self.delay[cat].setCurrentIndex(DELAYS.index(p['delay'].get(cat, 0)))
         self.wealth.setChecked(p['wealth'])
         self.names.setChecked(p['name_history'])
+        self.events.setChecked(p.get('events', True))
         self.wealth.setEnabled(self.share['statistics'].isChecked())
         self._loading = False
 
@@ -386,6 +420,7 @@ class SettingsWindow(QWidget):
             p['delay'][cat] = self.delay[cat].currentData()
         p['wealth'] = self.wealth.isChecked() and p['share'].get('statistics', False)
         p['name_history'] = self.names.isChecked()
+        p['events'] = self.events.isChecked()
         self.wealth.setEnabled(self.share['statistics'].isChecked())
         self.engine.set_prefs(fid, p)
 
@@ -583,6 +618,10 @@ class SettingsWindow(QWidget):
             label = {'eddn': 'EDDN', 'edsm': 'EDSM', 'edastro': 'EDAstro', 'inara': 'Inara'}
             self.int_status.setText('  ·  '.join(f'{label[k]}: {v}' for k, v in sorted(st.items())))
         has = bool(cm)
-        for x in (self.open_btn, self.forget_btn, self.verify_btn, self.portrait_btn):
+        for x in (self.open_btn, self.forget_btn, self.verify_btn, self.portrait_btn, self.join_btn,
+                  self.squad_sync_btn):
             x.setEnabled(has)
+        self.squad.setText('\n'.join(snap.get('squad') or [])
+                           or "Your squadron's events show here once its leader runs one (EDLD). Squad Goals is in "
+                              "beta: feedback and bug reports are welcome on the Indevlin Discord.")
         self._sync_squadron_tab(cm)

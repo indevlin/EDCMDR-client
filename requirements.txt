@@ -1,4 +1,5 @@
 # EDCMDR-client (python branch)
 PySide6-Essentials>=6.6
 cryptography>=42.0
+edcmdr-core @ git+https://github.com/indevlin/EDCMDR-core@20261128
 psutil>=5.9
