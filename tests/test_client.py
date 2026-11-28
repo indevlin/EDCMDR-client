@@ -25,9 +25,12 @@ os.environ['EDCMDR_HOME'] = str(TMP / 'home')
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 
-from edcmdr import journal, keys  # noqa: E402
+from edcmdr_core import keys  # noqa: E402
+from edcmdr_core.proto import ProtoError  # noqa: E402
+
+from edcmdr import journal  # noqa: E402
 from edcmdr.config import Settings  # noqa: E402
-from edcmdr.proto import Client, ProtoError  # noqa: E402
+from edcmdr.uplink import make_client as Client  # noqa: E402
 from edcmdr.state import EVENTS, Commander  # noqa: E402
 
 FIX = ROOT / 'tests' / 'journals'
@@ -594,7 +597,7 @@ class TestIntegrations(unittest.TestCase):
 
 class TestPublisherLock(unittest.TestCase):
     def test_one_publisher(self):
-        from edcmdr.single import PublisherLock
+        from edcmdr_core.single import PublisherLock
         path = TMP / 'publisher.lock'
         a, b = PublisherLock(path), PublisherLock(path)
         self.assertTrue(a.acquire())

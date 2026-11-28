@@ -93,12 +93,8 @@ jobs:
           sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-keysyms1 libxcb-shape0 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0
 
-      - name: Protocol lock matches the vendored spec
-        shell: bash
-        run: |
-          want=$(python -c "import json;print(json.load(open('protocol.lock'))['sha256'])")
-          have=$(python -c "import hashlib;print(hashlib.sha256(open('protocol/v1/spec.json','rb').read()).hexdigest())")
-          test "$want" = "$have" || { echo "::error::protocol/v1/spec.json differs from protocol.lock"; exit 1; }
+      - name: Protocol spec from EDCMDR-core
+        run: python -c "import edcmdr_core, edcmdr_core.spec as s; print('edcmdr-core', edcmdr_core.__version__, s.SHA256)"
 
       - name: Tests
         env:

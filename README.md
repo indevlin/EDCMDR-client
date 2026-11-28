@@ -99,6 +99,7 @@ publishing. edcmdr.com mirrors the latest published release within the hour.
 ## Tests
 
 ```sh
+pip install -e ../EDCMDR-core        # working against a local EDCMDR-core checkout
 python3 tests/test_client.py
 EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # plus end-to-end against the server
 ```
@@ -106,17 +107,16 @@ EDCMDR_SERVER_REPO=~/projects/indevlin/EDCMDR python3 tests/test_client.py   # p
 ## Files
 
     edcmdr_client.py     entry point
+    (EDCMDR-core)        protocol, keys, sharing settings and the publisher, pinned in requirements.txt
     edcmdr/journal.py    discovery, commander routing, tailing
     edcmdr/state.py      journal events → protocol categories
-    edcmdr/proto.py      signed pushes, signed-reply checks
-    edcmdr/uplink.py     the engine: sharing, debounce, retries
+    edcmdr/uplink.py     the engine: journals and integrations around edcmdr_core's publisher
     edcmdr/integrations.py  optional EDDN, EDSM, EDAstro and Inara uploads
     edcmdr/game.py       whether the game is running
     edcmdr/eddn.py       EDDN messages from journal events
     edcmdr/inara.py      Inara events from journal events
     edcmdr/capi.py       Frontier CAPI, with the sign-in kept on this computer
     edcmdr/ui/           tray and settings window
-    protocol/v1/         spec.json, vendored from the EDCMDR server repo (protocol.lock)
     scripts/build.py     one-file build with the build key injected
     docs/wiki/           player documentation, synced to the GitHub wiki
 

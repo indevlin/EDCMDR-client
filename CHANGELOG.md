@@ -1,8 +1,13 @@
 # EDCMDR client CHANGELOG
 
-Last updated: 20261126
+Last updated: 20261127
 
 ---
+
+## Released in 20261127
+
+### Changed: shared core
+- Publishing to ED Commanders (keys, signed pushes, sharing settings, verification) now comes from EDCMDR-core, the library EDLD also publishes through. Nothing changes for you: same keys, same settings file, same pushes.
 
 ## Released in 20261126
 

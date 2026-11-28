@@ -56,14 +56,14 @@ def main() -> int:
     ap.add_argument('--release', action='store_true')
     args = ap.parse_args()
     sys.path.insert(0, str(ROOT))
-    from edcmdr import keys
+    from edcmdr_core import keys
     version = build_version()
 
     key = build_key()
     if args.release and not key:
         sys.exit('release build needs EDCMDR_BUILD_KEY')
     if args.release and not keys.SERVER_KEYS:
-        sys.exit('release build needs SERVER_KEYS in edcmdr/keys.py')
+        sys.exit('release build needs SERVER_KEYS in edcmdr_core/keys.py (EDCMDR-core)')
     tracked = subprocess.run(['git', 'ls-files', '--error-unmatch', str(SECRET)], cwd=ROOT, capture_output=True)
     if tracked.returncode == 0:
         sys.exit(f'{SECRET} is tracked by git; remove it from the index first')
@@ -73,7 +73,6 @@ def main() -> int:
     mode = '--onedir' if platform.system() == 'Darwin' else '--onefile'
     cmd = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', mode, '--windowed',
            '--name', f'EDCMDR-{version}-{OS.get(platform.system(), platform.system().lower())}',
-           '--add-data', f'protocol/v1/spec.json{sep}protocol/v1',
            '--add-data', f'edcmdr/data{sep}edcmdr/data',
            '--add-data', f'LICENSE{sep}.']
     for m in QT_EXCLUDES:

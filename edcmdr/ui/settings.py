@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDia
 
 from .. import NAME, VERSION
 from ..config import DELAY_LABELS, DELAYS, SHAREABLE, SPEC
-from ..proto import ProtoError
+from edcmdr_core.proto import ProtoError
 from ..uplink import Engine
 
 LABELS = {
