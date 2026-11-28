@@ -48,6 +48,14 @@ The application name sent to Inara is `EDCMDR-client`. Commander data goes under
 key. Inara's application key is for its read-only requests; when Inara issues it, add it to this repository
 as the `INARA_APP_KEY` secret and release builds carry it.
 
+## Squad Goals
+
+Events a verified squadron leader runs from EDLD show in the tray tooltip and under Settings → Commanders:
+each event you count in, your place, amount and payout. **Use invitation code…** joins one you were invited
+to. **Take part in my squadron's events** (Sharing) is on unless switched off; taking part needs Frontier
+CAPI on, as ED Commanders reads your journal from Frontier with that sign-in and counts only what Frontier
+confirms.
+
 ## Run from source
 
 ```sh

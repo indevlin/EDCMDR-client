@@ -618,6 +618,21 @@ class TestIntegrations(unittest.TestCase):
         self.assertGreater(int(off), 0)
 
 
+class TestSquadLines(unittest.TestCase):
+    def test_lines(self):
+        from edcmdr.uplink import squad_lines
+        cm = [{'name': 'ONE', 'events_note': 'Sign in to Frontier to count in Squad Goals.',
+               'events': {'events': [
+                   {'title': 'Rush', 'unit': 't', 'state': 'open', 'standings': [{}, {}],
+                    'me': {'rank': 2, 'value': 400, 'credits': 10_000_000}},
+                   {'title': 'Old', 'unit': 'cr', 'state': 'closed', 'standings': [{}], 'me': None},
+                   {'title': 'Gone', 'unit': 't', 'state': 'cancelled'}]}},
+              {'name': 'TWO', 'events': None}]
+        self.assertEqual(squad_lines(cm), ['CMDR ONE: Sign in to Frontier to count in Squad Goals.',
+                                           'CMDR ONE · Rush: #2 of 2, 400 t → 10.0M cr',
+                                           'CMDR ONE · Old (final): nothing counted yet'])
+
+
 class TestPublisherLock(unittest.TestCase):
     def test_one_publisher(self):
         from edcmdr_core.single import PublisherLock
@@ -1048,7 +1063,36 @@ class TestEndToEnd(unittest.TestCase):
         self.assertNotIn('BRAVO TWO', html, 'membership not shared, so not shown as leader')
         st, html, _ = ts.request('/cmdr/bravo-two')
         self.assertIn(url, html, 'commander page shows the portrait')
+        self._squad_goals(e, s)
         os.environ['EDCMDR_HOME'] = str(TMP / 'home')
+
+    def _squad_goals(self, e, s):
+        """The leader saves an event; the engine has the server read Frontier's journal with the kept sign-in."""
+        import datetime as dt
+        ts = self.ts
+        now = int(time.time())
+        j = e.event_admin('F1000002', 'save', title='Bounty Week', metric='bounty_value', starts=now - 2 * 86400,
+                          ends=now + 86400, payout={'pool': 5_000_000, 'places': [1]})
+        self.assertEqual(j['event']['title'], 'Bounty Week')
+        y = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime('%Y-%m-%dT12:00:00Z')
+        ts.Frontier.days = {1: json.dumps({'timestamp': y, 'event': 'Bounty', 'TotalReward': 125000}) + '\n'}
+        try:
+            for _ in range(3):
+                e.tick()
+                ev = (e.events_of('F1000002') or {}).get('events') or []
+                if ev and ev[0].get('me'):
+                    break
+                e.rt['F1000002'].sync_next = 0
+        finally:
+            ts.Frontier.days = {}
+        self.assertEqual(ev[0]['me']['value'], 125000, 'scored from the journal Frontier returned')
+        lines = e.snapshot()['squad']
+        self.assertIn('CMDR BRAVO TWO · Bounty Week: #1 of 1, 125.0K cr → 5.0M cr', lines)
+        p = s.prefs('F1000002')
+        p['events'] = False
+        e.set_prefs('F1000002', p)
+        e.tick()
+        self.assertEqual(e.snapshot()['squad'], [], 'switched off: nothing shown or read')
 
     def test_engine_publishes(self):
         from edcmdr.uplink import Engine

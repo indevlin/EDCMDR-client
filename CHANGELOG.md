@@ -6,6 +6,10 @@ Last updated: 20261128
 
 ## Released in 20261128
 
+### Added: Squad Goals
+- Your squadron's events on ED Commanders, run by its leader from EDLD: the tray tooltip and **Settings → Commanders → Squad Goals** show each event you count in, your place, amount and payout. **Use invitation code…** joins an event you were invited to; **Update standings** reads them now.
+- **Take part in my squadron's events** (Sharing), on unless switched off. Taking part, ED Commanders reads your journal from Frontier for each event's days with the client's Frontier CAPI sign-in, and counts only what Frontier confirms.
+
 ### Added: Frontier sign-in reminders
 - With Frontier CAPI on, the tray warns a few days before Frontier's sign-in runs out and once it has ended. The reminder stays in the tray menu until you verify with Frontier again; **Frontier sign-in reminders** in the tray menu turns it off for good. Squadron access on ED Commanders depends on that sign-in.
 

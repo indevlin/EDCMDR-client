@@ -26,6 +26,35 @@ def embedded_build_key() -> str | None:
         return None
 
 
+def _amount(v, unit: str) -> str:
+    v = int(v or 0)
+    if unit != 'cr':
+        return f'{v:,} t'
+    for div, suf in ((1_000_000_000, 'B'), (1_000_000, 'M'), (1_000, 'K')):
+        if v >= div:
+            return f'{v / div:.1f}{suf} cr'
+    return f'{v} cr'
+
+
+def squad_lines(commanders: list[dict]) -> list[str]:
+    """One line per Squad Goal each commander counts in, and any note: 'CMDR X · Osmium Rush: #2 of 7, 400 t → 10.0M cr'."""
+    out = []
+    for c in commanders:
+        ev = c.get('events') or {}
+        if c.get('events_note'):
+            out.append(f"CMDR {c['name']}: {c['events_note']}")
+        for e in ev.get('events') or []:
+            if e.get('state') == 'cancelled':
+                continue
+            me, unit = e.get('me') or {}, e.get('unit') or ''
+            n = len(e.get('standings') or [])
+            where = f"#{me['rank']} of {n}, {_amount(me.get('value'), unit)}" if me else 'nothing counted yet'
+            pay = f" → {_amount(me['credits'], 'cr')}" if me and me.get('credits') else ''
+            final = ' (final)' if e.get('state') == 'closed' else ''
+            out.append(f"CMDR {c['name']} · {e.get('title')}{final}: {where}{pay}")
+    return out
+
+
 def make_client(base: str | None = None) -> Client:
     return Client(NAME, VERSION, keys.load_build_key(embedded_build_key()), base)
 
@@ -75,6 +104,7 @@ class Engine(Publisher):
     def snapshot(self) -> dict:
         s = super().snapshot()
         s['notices'] = self.signin_notices()
+        s['squad'] = squad_lines(s['commanders'])
         return s
 
     def signin_notices(self) -> list[dict]:
